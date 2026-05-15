@@ -31,9 +31,9 @@ float LeftSpeed, RightSpeed;
 float AveSpeed, DifSpeed;
 
 PID_t AnglePID = {
-	.Kp = 5,
-	.Ki = 0.1,
-	.Kd = 5,
+	.Kp = 2.4,
+	.Ki = 0.25,
+	.Kd = 6,
 	
 	.OutMax = 100,
 	.OutMin = -100,
@@ -45,8 +45,8 @@ PID_t AnglePID = {
 };
 
 PID_t SpeedPID = {
-	.Kp = 2,
-	.Ki = 0.05,
+	.Kp = 2.2,
+	.Ki = 0.1,
 	.Kd = 0,
 	
 	.OutMax = 20,
@@ -57,8 +57,8 @@ PID_t SpeedPID = {
 };
 
 PID_t TurnPID = {
-	.Kp = 4,
-	.Ki = 3,
+	.Kp = 5.5,
+	.Ki = 0.07,
 	.Kd = 0,
 	
 	.OutMax = 50,
@@ -202,6 +202,7 @@ int main(void)
 					int8_t RH = atoi(RHStr);
 					int8_t RV = atoi(RVStr);
 					
+					
 					SpeedPID.Target = LV / 25.0;
 					TurnPID.Target = RH / 25.0;
 				}
@@ -235,7 +236,7 @@ void TIM1_UP_IRQHandler(void)
 			
 			AngleAcc = -atan2(AX, AZ) / 3.14159 * 180;
 			
-			AngleAcc += 0.5;
+			AngleAcc += 2.5;
 			
 			AngleGyro = Angle + GY / 32768.0 * 2000 * 0.01;
 			

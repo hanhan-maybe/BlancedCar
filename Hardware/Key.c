@@ -51,6 +51,7 @@ uint8_t Key_GetState(void)
 	return 0;
 }
 
+//松手触发”的按键检测程序
 void Key_Tick(void)
 {
 	static uint8_t Count;
