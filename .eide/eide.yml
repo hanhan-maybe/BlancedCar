@@ -3,7 +3,8 @@ name: Project
 type: ARM
 deviceName: STM32F103C8
 packDir: .pack/Keil/STM32F1xx_DFP.2.3.0
-srcDirs: []
+srcDirs:
+  - FreeRTOS
 virtualFolder:
   name: <virtual_root>
   files: []
@@ -107,6 +108,12 @@ virtualFolder:
         - path: User/stm32f10x_it.h
         - path: User/PID.c
         - path: User/PID.h
+        - path: User/FreeRTOSConfig.h
+        - path: User/FreeRTOSHooks.c
+        - path: User/AppData.c
+        - path: User/AppData.h
+        - path: User/FreeRTOSTasks.c
+        - path: User/FreeRTOSTasks.h
       folders: []
 dependenceList: []
 outDir: build
@@ -127,6 +134,8 @@ targets:
         - Hardware
         - .cmsis/include
         - RTE/_Target 1
+        - FreeRTOS/include
+        - FreeRTOS/portable/ARM_CM3
       libList: []
     excludeList: []
     settings:
