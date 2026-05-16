@@ -51,23 +51,41 @@ uint8_t Key_GetState(void)
 	return 0;
 }
 
-//松手触发”的按键检测程序
+//松手触发的按键消抖程序
+//改良非阻塞式按键检测，每1 ms采样一次，状态连续稳定20 ms后再确认按键状态变化
 void Key_Tick(void)
 {
-	static uint8_t Count;
-	static uint8_t CurrState, PrevState;
-	
-	Count ++;
-	if (Count >= 20)
-	{
-		Count = 0;
-		
-		PrevState = CurrState;
-		CurrState = Key_GetState();
-		
-		if (CurrState == 0 && PrevState != 0)
-		{
-			Key_Num = PrevState;
-		}
-	}
+    static uint8_t LastRawState = 0;     // 上一次原始采样状态
+    static uint8_t StableState = 0;      // 已确认的稳定状态
+    static uint8_t DebounceCount = 0;    // 稳定计数
+
+    uint8_t RawState = Key_GetState();
+
+    /* 如果当前原始状态与上次不同，说明可能正在抖动 */
+    if (RawState != LastRawState)
+    {
+        LastRawState = RawState;
+        DebounceCount = 0;
+    }
+    else
+    {
+        /* 原始状态持续稳定 */
+        if (DebounceCount < 20)
+        {
+            DebounceCount++;
+        }
+
+        /* 稳定达到20ms，且与已确认状态不同，确认发生状态变化 */
+        if (DebounceCount >= 20 && RawState != StableState)
+        {
+            uint8_t PrevStableState = StableState;
+            StableState = RawState;
+
+            /* 松手触发：之前有按键，现在无按键 */
+            if (StableState == 0 && PrevStableState != 0)
+            {
+                Key_Num = PrevStableState;
+            }
+        }
+    }
 }

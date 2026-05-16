@@ -213,6 +213,8 @@ static void AppTask_KeyLed(void *pvParameters)
          * 保持原程序按键时序：
          * 原来 Key_Tick() 是每1ms由TIM1中断调用一次。
          */
+        //Key_Tick() 的“函数调用频率”是 1 ms 一次；
+        //Key_Tick() 内部真正进行“按键采样和事件判定”的频率是 20 ms 一次。
         Key_Tick();
 
         if (RunFlag)
