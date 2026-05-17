@@ -252,7 +252,7 @@ static void AppTask_Control(void *pvParameters)
 
         SpeedTurnCount++;
 
-        if (SpeedTurnCount >= 5)
+        if (SpeedTurnCount >= 3)
         {
             SpeedTurnCount = 0;
 
@@ -266,7 +266,11 @@ static void AppTask_Control(void *pvParameters)
             {
                 SpeedPID.Actual = AveSpeed;
                 PID_Update(&SpeedPID);
-                AnglePID.Target = SpeedPID.Out;
+            /*
+                * 速度环输出负责动态速度控制；
+                * BalanceAngleTrim 负责静态平衡点补偿。
+                */
+                AnglePID.Target = SpeedPID.Out + BalanceAngleTrim;
                 /* 临时调试：固定角度环目标为0，不让速度环干预直立平衡 */
                 //AnglePID.Target = 0;
 
@@ -395,6 +399,7 @@ static void AppTask_Display(void *pvParameters)
         OLED_Update();
 
         //BlueSerial_Printf("[plot,%d,%f,%f,%f]", GY, AngleAcc, AngleGyro, Angle);
+        BlueSerial_Printf("[plot,%f,%f,%f,%f]",AnglePID.Target,SpeedPID.Out,AveSpeed,SpeedPID.Target);
 
         vTaskDelay(pdMS_TO_TICKS(100));
     }
