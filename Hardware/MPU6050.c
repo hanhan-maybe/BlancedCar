@@ -1,6 +1,7 @@
 #include "stm32f10x.h"                  // Device header
 #include "MyI2C.h"
 #include "MPU6050_Reg.h"
+#include "Delay.h"
 
 #define MPU6050_ADDRESS		0xD0
 
@@ -79,6 +80,7 @@ uint8_t MPU6050_GetID(void)
 {
 	return MPU6050_ReadReg(MPU6050_WHO_AM_I);
 }
+
 
 //void MPU6050_GetData(int16_t *AccX, int16_t *AccY, int16_t *AccZ, 
 //						int16_t *GyroX, int16_t *GyroY, int16_t *GyroZ)

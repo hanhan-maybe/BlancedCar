@@ -91,6 +91,12 @@ static void AppTask_Control(void *pvParameters)
 
     uint8_t SpeedTurnCount = 0;
 
+     /* GY 启动前静止零偏标定变量 */
+    static int32_t GyroYSum = 0;
+    static uint16_t GyroYSampleCount = 0;
+
+    #define GYRO_Y_CALIB_SAMPLE_NUM 200
+
     for (;;)
     {
         /*
@@ -114,17 +120,88 @@ static void AppTask_Control(void *pvParameters)
 
         MPU6050_GetData(&AX, &AY, &AZ, &GX, &GY, &GZ);
 
-        GY -= 16;
+        /* GY 原始值转 float，便于后续调试显示 */
+        GYRaw = (float)GY;
 
-        AngleAcc = -atan2(AX, AZ) / 3.14159f * 180.0f;
+        /* =========================================================
+        * 按键启动前的 GY 静止零偏标定
+        * ========================================================= */
+        if (GyroCalibRequest == 1 && RunFlag == 0)
+        {
+            /* 第一次进入标定 */
+            if (GyroCalibBusy == 0)
+            {
+                GyroCalibBusy = 1;
+                GyroYSum = 0;
+                GyroYSampleCount = 0;
+            }
+
+            /* 累加当前周期的 GY 原始值 */
+            GyroYSum += GY;
+            GyroYSampleCount++;
+
+            /* 采样完成 */
+            if (GyroYSampleCount >= GYRO_Y_CALIB_SAMPLE_NUM)
+            {
+                /* 得到本次启动前的 GY 零偏 */
+                GyroYBias =
+                    (float)GyroYSum / (float)GYRO_Y_CALIB_SAMPLE_NUM;
+
+                /* 标定状态复位 */
+                GyroCalibRequest = 0;
+                GyroCalibBusy = 0;
+                GyroCalibDone = 1;
+
+                /*
+                * 重新初始化 PID，
+                * 确保从干净状态进入平衡控制。
+                */
+                PID_Init(&AnglePID);
+                PID_Init(&SpeedPID);
+                PID_Init(&TurnPID);
+
+                SpeedPID.Target = 0;
+                TurnPID.Target = 0;
+                DifPWM = 0;
+
+                /*
+                * 此处继续保持你原来的 AngleAcc 固定修正：
+                * AngleAcc += 2.5f
+                */
+                AngleAcc = -atan2((float)AX, (float)AZ) / 3.14159f * 180.0f;
+                AngleAcc += 2.5f;
+
+                /*
+                * 进入平衡前，将融合角初始值对齐到当前加速度角，
+                * 避免旧 Angle 状态残留影响启动瞬间。
+                */
+                Angle = AngleAcc;
+                AngleGyro = AngleAcc;
+
+                /*
+                * 标定结束后，正式进入平衡模式。
+                */
+                RunFlag = 1;
+            }
+        }
+
+        /* =========================================================
+        * 正常姿态解算
+        * ========================================================= */
+
+        /* 补偿后的陀螺仪 Y 轴原始量 */
+        GYCorrected = GYRaw - GyroYBias;
+
+        /* AngleAcc 仍保持原来的固定补偿，不改 */
+        AngleAcc = -atan2((float)AX, (float)AZ) / 3.14159f * 180.0f;
         AngleAcc += 2.5f;
 
-        AngleGyro = Angle + GY / 32768.0f * 2000.0f * 0.01f;
+        /* 陀螺积分使用补偿后的 GYCorrected */
+        AngleGyro = Angle + GYCorrected / 32768.0f * 2000.0f * 0.01f;
 
-        {
-            float Alpha = 0.01f;
-            Angle = Alpha * AngleAcc + (1.0f - Alpha) * AngleGyro;
-        }
+        /* 互补滤波 */
+        float Alpha = 0.01f;
+        Angle = Alpha * AngleAcc + (1.0f - Alpha) * AngleGyro;
 
         if (Angle > 50.0f || Angle < -50.0f)
         {
@@ -190,6 +267,8 @@ static void AppTask_Control(void *pvParameters)
                 SpeedPID.Actual = AveSpeed;
                 PID_Update(&SpeedPID);
                 AnglePID.Target = SpeedPID.Out;
+                /* 临时调试：固定角度环目标为0，不让速度环干预直立平衡 */
+                //AnglePID.Target = 0;
 
                 TurnPID.Actual = DifSpeed;
                 PID_Update(&TurnPID);
@@ -227,22 +306,33 @@ static void AppTask_KeyLed(void *pvParameters)
         }
 
         KeyNum = Key_GetNum();
-
         if (KeyNum == 1)
         {
             if (RunFlag == 0)
             {
-                PID_Init(&AnglePID);
-                PID_Init(&SpeedPID);
-                PID_Init(&TurnPID);
-                RunFlag = 1;
+                /*
+                * 不直接进入平衡。
+                * 先发出 GY 零偏标定请求。
+                */
+                if (GyroCalibBusy == 0)
+                {
+                    GyroCalibRequest = 1;
+                    GyroCalibDone = 0;
+                }
             }
             else
             {
+                /*
+                * 已在平衡中，再按一次按键则停止。
+                */
                 RunFlag = 0;
+
+                /* 停止后清掉遥控与差速残留 */
+                SpeedPID.Target = 0;
+                TurnPID.Target = 0;
+                DifPWM = 0;
             }
         }
-
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
@@ -264,15 +354,19 @@ static void AppTask_Display(void *pvParameters)
         /*观察当前剩余堆空间 和 启动以来最少剩余堆空间*/
         //size_t FreeHeap = xPortGetFreeHeapSize();
         //size_t MinEverHeap = xPortGetMinimumEverFreeHeapSize();
+        if (GyroCalibBusy)
+        {
+            OLED_Printf(0, 0, OLED_8X16, "GY CAL...");
+        }
 
         OLED_Printf(0, 0, OLED_6X8, "  Angle");
         OLED_Printf(0, 8, OLED_6X8, "P:%05.2f", AnglePID.Kp);
         OLED_Printf(0, 16, OLED_6X8, "I:%05.2f", AnglePID.Ki);
         OLED_Printf(0, 24, OLED_6X8, "D:%05.2f", AnglePID.Kd);
         OLED_Printf(0, 32, OLED_6X8, "T:%+05.1f", AnglePID.Target);
-        OLED_Printf(0, 40, OLED_6X8, "A:%+05.1f", Angle);
+        OLED_Printf(0, 40, OLED_6X8, "A:%+05.1f", Angle);//便于校准中心角度
         OLED_Printf(0, 48, OLED_6X8, "O:%+05.0f", AnglePID.Out);
-        OLED_Printf(0, 56, OLED_6X8, "GY:%+05d", GY);
+        OLED_Printf(0, 56, OLED_6X8, "GY:%+05.0f", GYCorrected);
 
         /*观察当前剩余堆空间 和 启动以来最少剩余堆空间*/
         /*OLED_Printf(56, 56, OLED_6X8, "H:%04u M:%04u",
@@ -300,6 +394,8 @@ static void AppTask_Display(void *pvParameters)
 
         OLED_Update();
 
+        //BlueSerial_Printf("[plot,%d,%f,%f,%f]", GY, AngleAcc, AngleGyro, Angle);
+
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -307,8 +403,6 @@ static void AppTask_Display(void *pvParameters)
 /*-----------------------------------------------------------
  * 蓝牙通信解析任务
  *
- * 原 main while(1) 中 BlueSerial_RxFlag 的解析逻辑迁移到这里。
- * 目前仍保留“轮询标志位”的方式，下一步可再升级为任务通知。
  *----------------------------------------------------------*/
 static void AppTask_Comm(void *pvParameters)
 {

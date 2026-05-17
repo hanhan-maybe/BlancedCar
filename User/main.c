@@ -24,6 +24,7 @@ int main(void)
 {
     OLED_Init();
     MPU6050_Init();
+	
     BlueSerial_Init();
     LED_Init();
     Key_Init();

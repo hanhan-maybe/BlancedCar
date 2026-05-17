@@ -12,6 +12,16 @@ float AngleAcc;
 float AngleGyro;
 float Angle;
 
+/* GY 零偏自适应补偿相关 */
+float GyroYBias;
+float GYRaw;
+float GYCorrected;
+
+/* GY 启动前静止零偏标定状态 */
+volatile uint8_t GyroCalibRequest = 0;
+volatile uint8_t GyroCalibBusy = 0;
+volatile uint8_t GyroCalibDone = 0;
+
 /* 按键与运行状态 */
 uint8_t KeyNum;
 volatile uint8_t RunFlag;

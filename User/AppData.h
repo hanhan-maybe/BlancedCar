@@ -16,6 +16,16 @@ extern float AngleAcc;
 extern float AngleGyro;
 extern float Angle;
 
+/* GY 零偏自适应补偿相关 */
+extern float GyroYBias;       // GY 零偏估计值
+extern float GYRaw;           // GY 原始值转 float
+extern float GYCorrected;     // GY 零偏补偿后结果
+
+/* GY 启动前静止零偏标定状态 */
+extern volatile uint8_t GyroCalibRequest;   // 1: 请求开始标定
+extern volatile uint8_t GyroCalibBusy;      // 1: 正在标定
+extern volatile uint8_t GyroCalibDone;      // 1: 本次标定已完成
+
 /* 按键与运行状态 */
 extern uint8_t KeyNum;
 extern volatile uint8_t RunFlag;
