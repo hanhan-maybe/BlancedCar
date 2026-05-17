@@ -38,6 +38,9 @@ extern int16_t AvePWM, DifPWM;
 extern float LeftSpeed, RightSpeed;
 extern float AveSpeed, DifSpeed;
 
+/* 静态平衡角补偿 */
+extern float BalanceAngleTrim;
+
 /* 三环 PID 控制器 */
 extern PID_t AnglePID;
 extern PID_t SpeedPID;

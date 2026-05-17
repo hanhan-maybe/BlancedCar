@@ -17,6 +17,11 @@ float GyroYBias;
 float GYRaw;
 float GYCorrected;
 
+/* 静态平衡角补偿
+ * 用于抵消小车无速度指令时的固定方向慢滑
+ */
+float BalanceAngleTrim = 2.0f;
+
 /* GY 启动前静止零偏标定状态 */
 volatile uint8_t GyroCalibRequest = 0;
 volatile uint8_t GyroCalibBusy = 0;
@@ -36,9 +41,12 @@ float AveSpeed, DifSpeed;
 
 /* 角度环 PID */
 PID_t AnglePID = {
-    .Kp = 2.4,
-    .Ki = 0.25,
+    .Kp = 1.55,
+    //.Kp = 2.4,
+    .Ki = 0.1,
+    //.Ki = 0.25,
     .Kd = 6,
+
 
     .OutMax = 100,
     .OutMin = -100,
