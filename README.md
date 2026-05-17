@@ -63,15 +63,17 @@
 4. OLED 实时数据显示；
 5. 蓝牙串口在线调参与遥控；
 6. 按键启停与 LED 状态指示；
-7. 基于 FreeRTOS 的任务化软件架构；
-8. 基于 TIM1 中断通知的周期控制任务调度。
+7. 按键启动前的 **2 s GY 静止零偏标定**；
+8. 基于 FreeRTOS 的任务化软件架构；
+9. 基于 TIM1 中断通知的周期控制任务调度。
 
 与原始裸机版本相比，当前工程的主要变化是：
 
 * 原来由 `while(1)` 和 `TIM1` 中断共同承担的大量逻辑，已拆分为多个 FreeRTOS 任务；
 * 实时控制逻辑从中断服务函数中迁移至 `ControlTask`；
 * `TIM1` 中断不再直接进行姿态解算和 PID 计算，而是仅用于**周期性唤醒控制任务**；
-* OLED 显示、按键处理、蓝牙命令解析分别运行于独立任务中，软件结构更清晰，后续扩展性更好。
+* OLED 显示、按键处理、蓝牙命令解析分别运行于独立任务中，软件结构更清晰，后续扩展性更好；
+* 平衡启动流程由“按键后立即运行”改为“**按键请求标定 → ControlTask 完成 200 次 GY 采样 → 计算零偏 → 再进入平衡模式**”，降低固定陀螺零偏带来的姿态误差。
 
 ---
 
@@ -83,7 +85,8 @@
 本工程采用的基本控制思路为：
 
 * **MPU6050** 采集加速度与角速度；
-* 使用 **互补滤波** 估计车体倾角；
+* 启动平衡前对俯仰轴陀螺仪 `GY` 进行 **2 s 静止零偏标定**；
+* 使用补偿后的 `GYCorrected` 与加速度角进行 **互补滤波**，估计车体倾角；
 * 使用 **角度环 PID** 保持车体直立；
 * 使用 **速度环 PID** 控制前进、后退与停车；
 * 使用 **转向环 PID** 控制左右差速；
@@ -109,6 +112,9 @@
 并计算：
 
 * 加速度倾角 `AngleAcc`
+* GY 原始量 `GYRaw`
+* 启动前标定得到的 GY 零偏 `GyroYBias`
+* 零偏补偿后的角速度量 `GYCorrected`
 * 角速度积分角 `AngleGyro`
 * 融合后的车体姿态角 `Angle`
 
@@ -221,7 +227,10 @@
    * `ControlTask` 等待 TIM1 中断通知；
    * `KeyLedTask` 每 1 ms 执行按键扫描与 LED 更新；
    * `DisplayTask` 每 100 ms 刷新 OLED；
-   * `CommTask` 每 5 ms 轮询并解析蓝牙数据。
+   * `CommTask` 每 5 ms 轮询并解析蓝牙数据；
+7. 用户按下 Key1 后，不直接进入平衡，而是先置位 `GyroCalibRequest`；
+8. `ControlTask` 按 10 ms 控制节拍累计 200 次 `GY` 原始值，约 2 s 后计算 `GyroYBias`；
+9. 标定完成后，系统重新初始化三环 PID、清零遥控目标与差速输出，并令 `RunFlag = 1`，正式进入平衡模式。
 
 ---
 
@@ -353,16 +362,60 @@ if (NotifyCount > 1)
 每收到一次任务通知，执行一次：
 
 1. 读取 MPU6050 数据；
-2. 计算姿态角；
-3. 执行互补滤波；
-4. 判断倾角是否越界；
-5. 执行角度环 PID；
-6. 计算左右轮 PWM；
-7. 输出电机驱动。
+2. 保存 `GYRaw`，并基于 `GyroYBias` 计算 `GYCorrected`；
+3. 计算加速度角 `AngleAcc`；
+4. 使用补偿后的 `GYCorrected` 计算角速度积分角 `AngleGyro`；
+5. 执行互补滤波得到姿态角 `Angle`；
+6. 判断倾角是否越界；
+7. 在 `RunFlag = 1` 时执行角度环 PID；
+8. 计算左右轮 PWM 并输出电机驱动。
 
 ---
 
-#### 2.3 50 ms 控制内容
+#### 2.3 启动前 2 s GY 静止零偏标定
+
+当 Key1 在停止状态下触发后，系统不会立即令 `RunFlag = 1`，而是由 `KeyLedTask` 置位：
+
+```c
+GyroCalibRequest = 1;
+```
+
+随后 `ControlTask` 在 10 ms 周期内完成非阻塞采样：
+
+```c
+#define GYRO_Y_CALIB_SAMPLE_NUM 200
+```
+
+即：
+
+```text
+200 次 × 10 ms = 2 s
+```
+
+标定期间系统累计 `GY` 原始值：
+
+```c
+GyroYSum += GY;
+GyroYSampleCount++;
+```
+
+采样完成后计算：
+
+```c
+GyroYBias = (float)GyroYSum / GYRO_Y_CALIB_SAMPLE_NUM;
+```
+
+随后执行：
+
+1. 清除标定请求与忙状态；
+2. `PID_Init(&AnglePID)`、`PID_Init(&SpeedPID)`、`PID_Init(&TurnPID)`；
+3. 清零 `SpeedPID.Target`、`TurnPID.Target` 与 `DifPWM`；
+4. 将融合角状态重新对齐到当前加速度角，避免旧姿态状态残留；
+5. 设置 `RunFlag = 1`，进入平衡模式。
+
+---
+
+#### 2.4 50 ms 控制内容
 
 控制任务内部使用 `SpeedTurnCount` 计数：
 
@@ -400,7 +453,7 @@ vTaskDelay(pdMS_TO_TICKS(1));
 
 #### 3.2 任务内容
 
-1. 调用 `Key_Tick()` 实现按键扫描与消抖；
+1. 调用 `Key_Tick()` 实现按键扫描与稳定计数式消抖；
 2. 根据 `RunFlag` 控制 LED：
 
    * `RunFlag = 1`：LED 亮；
@@ -412,8 +465,8 @@ vTaskDelay(pdMS_TO_TICKS(1));
    ```
 4. 若检测到 1 号按键：
 
-   * 当前停止 → 初始化三个 PID 并进入运行；
-   * 当前运行 → 立即停止。
+   * 当前停止 → 不直接运行，而是发出 `GyroCalibRequest = 1`，请求启动前 GY 零偏标定；
+   * 当前运行 → 立即停止，并清零 `SpeedPID.Target`、`TurnPID.Target` 与 `DifPWM`。
 
 ---
 
@@ -422,8 +475,12 @@ vTaskDelay(pdMS_TO_TICKS(1));
 ```text
 按键1松手触发
    │
-   ├── 小车停止状态：初始化PID，RunFlag = 1
-   └── 小车运行状态：RunFlag = 0
+   ├── 小车停止状态
+   │      └── 请求 2 s GY 静止零偏标定
+   │              └── 标定完成后 RunFlag = 1
+   │
+   └── 小车运行状态
+          └── RunFlag = 0，并清除遥控目标与差速输出
 ```
 
 ---
@@ -442,7 +499,7 @@ vTaskDelay(pdMS_TO_TICKS(100));
 
 #### 4.2 显示内容
 
-OLED 分三栏显示：
+OLED 分三栏显示；代码中还加入了启动前 GY 标定状态提示字符串 `GY CAL...` 的输出逻辑：
 
 ##### 角度环区域
 
@@ -452,7 +509,7 @@ OLED 分三栏显示：
 * 角度目标值 `AnglePID.Target`
 * 实际角度 `Angle`
 * 角度环输出 `AnglePID.Out`
-* 陀螺仪 `GY`
+* 补偿后的陀螺仪量 `GYCorrected`
 * 输出偏置 `OutOffset`
 
 ##### 速度环区域
@@ -659,11 +716,33 @@ MPU6050 用于测量车体运动状态，读取：
 当前平衡姿态主要使用：
 
 * `AX` 与 `AZ` 计算加速度倾角；
-* `GY` 进行角速度积分。
+* `GY` 作为俯仰轴角速度原始量；
+* 启动前 2 s 静止标定得到的 `GyroYBias`；
+* 零偏补偿后的 `GYCorrected` 进行角速度积分。
 
 ---
 
-### 1.2 数据读取方式
+### 1.2 GY 启动前静止零偏标定
+
+终版工程不再采用固定写死的 `GY -= 16`。当前方案为：
+
+1. 用户在停止状态下按下 Key1；
+2. `KeyLedTask` 仅发出标定请求；
+3. `ControlTask` 在 10 ms 周期内连续采样 200 次 `GY`；
+4. 计算平均值作为 `GyroYBias`；
+5. 运行时使用：
+
+```c
+GYCorrected = GYRaw - GyroYBias;
+```
+
+6. 再令 `RunFlag = 1`，进入平衡控制。
+
+该流程使每次进入平衡模式前，都基于当前实际传感器状态估计俯仰轴陀螺零偏，避免长期依赖固定经验补偿值。
+
+---
+
+### 1.3 数据读取方式
 
 工程使用连续寄存器读取：
 
@@ -675,7 +754,7 @@ MPU6050_ReadRegs(MPU6050_ACCEL_XOUT_H, Data, 14);
 
 ---
 
-### 1.3 配置参数
+### 1.4 配置参数
 
 初始化中配置：
 
@@ -695,7 +774,7 @@ MPU6050_ACCEL_CONFIG = 0x18
 
 ---
 
-### 1.4 对应工程文件
+### 1.5 对应工程文件
 
 ```text
 Hardware/MPU6050.c
@@ -923,8 +1002,9 @@ Key1
 
 实现：
 
-* 停止 → 运行；
-* 运行 → 停止。
+* 停止状态下触发 → 请求启动前 2 s GY 零偏标定；
+* 标定完成后 → 进入平衡运行；
+* 运行状态下再次触发 → 停止小车。
 
 ---
 
@@ -1195,31 +1275,54 @@ System/Timer.h
 ### 2.1 加速度计角度
 
 ```c
-AngleAcc = -atan2(AX, AZ) / 3.14159f * 180.0f;
+AngleAcc = -atan2((float)AX, (float)AZ) / 3.14159f * 180.0f;
 AngleAcc += 2.5f;
 ```
 
 其中：
 
-* `atan2(AX, AZ)` 用于计算倾角；
-* `+2.5f` 为姿态零点修正。
+* `atan2(AX, AZ)` 用于计算车体俯仰倾角；
+* `+2.5f` 为当前保留的固定姿态零点修正。
 
 ---
 
-### 2.2 陀螺仪积分角
+### 2.2 启动前 GY 零偏标定
+
+按键启动平衡前，系统在 `ControlTask` 中累计 200 次 `GY` 原始采样，得到：
 
 ```c
-AngleGyro = Angle + GY / 32768.0f * 2000.0f * 0.01f;
+GyroYBias = (float)GyroYSum / GYRO_Y_CALIB_SAMPLE_NUM;
+```
+
+之后每个控制周期计算：
+
+```c
+GYCorrected = GYRaw - GyroYBias;
+```
+
+其中：
+
+* `GYRaw` 为当前读取的 `GY` 原始数据；
+* `GyroYBias` 为本次启动前估计的俯仰轴陀螺零偏；
+* `GYCorrected` 为用于姿态积分的补偿后角速度量。
+
+---
+
+### 2.3 陀螺仪积分角
+
+```c
+AngleGyro = Angle + GYCorrected / 32768.0f * 2000.0f * 0.01f;
 ```
 
 其中：
 
 * `2000.0f` 对应陀螺仪量程；
-* `0.01f` 对应 10 ms 采样周期。
+* `0.01f` 对应 10 ms 控制周期；
+* 积分输入已由 `GY` 原始量切换为 `GYCorrected`。
 
 ---
 
-### 2.3 互补滤波
+### 2.4 互补滤波
 
 ```c
 float Alpha = 0.01f;
@@ -1229,7 +1332,7 @@ Angle = Alpha * AngleAcc + (1.0f - Alpha) * AngleGyro;
 即：
 
 * 低比例引入加速度计角度，抑制长期漂移；
-* 高比例保留陀螺仪积分角，保证短时动态响应。
+* 高比例保留补偿后陀螺仪积分角，保证短时动态响应。
 
 ---
 
@@ -1527,6 +1630,20 @@ main()
     └── 正常情况下不会执行到这里
 ```
 
+调度器启动后的 Key1 启动流程如下：
+
+```text
+停止状态
+│
+├── Key1 松手触发
+├── GyroCalibRequest = 1
+├── ControlTask 以 10 ms 周期采集 200 次 GY
+├── 约 2 s 后计算 GyroYBias
+├── 初始化 Angle / Speed / Turn 三个 PID
+├── 清零速度目标、转向目标与差速输出
+└── RunFlag = 1，进入平衡模式
+```
+
 ---
 
 ## 九、蓝牙通信协议说明
@@ -1592,14 +1709,14 @@ RH -> 小车左右转向目标
 | 文件                        | 功能                        |
 | ------------------------- | ------------------------- |
 | `User/main.c`             | 系统初始化、任务创建、调度器启动、TIM1中断回调 |
-| `User/FreeRTOSTasks.c`    | 四个核心任务的实现                 |
+| `User/FreeRTOSTasks.c`    | 四个核心任务实现，并包含启动前 GY 零偏标定状态机 |
 | `User/FreeRTOSTasks.h`    | 任务创建函数与控制任务句柄声明           |
-| `User/AppData.c/h`        | 全局共享变量与三个 PID 实例          |
+| `User/AppData.c/h`        | 全局共享变量、三环 PID 实例、GY 零偏与标定状态变量 |
 | `User/PID.c/h`            | 通用 PID 算法                 |
 | `User/FreeRTOSConfig.h`   | FreeRTOS 核心配置             |
 | `User/FreeRTOSHooks.c`    | 内存失败与栈溢出 Hook             |
 | `System/Timer.c/h`        | TIM1 10 ms 定时中断           |
-| `Hardware/MPU6050.c/h`    | 姿态传感器驱动                   |
+| `Hardware/MPU6050.c/h`    | 姿态传感器底层驱动与原始六轴数据读取         |
 | `Hardware/MyI2C.c/h`      | 软件 I2C                    |
 | `Hardware/Motor.c/h`      | 电机方向控制                    |
 | `Hardware/PWM.c/h`        | PWM 输出                    |
@@ -1626,6 +1743,7 @@ RH -> 小车左右转向目标
 | 主循环处理按键与LED | `KeyLedTask`     |
 | 中断内直接控制算法   | `ControlTask` 执行 |
 | 定时器仅用于中断运算  | 定时器触发任务通知        |
+| 固定写死 GY 零偏  | 按键启动前 2 s 静止标定 `GyroYBias` |
 
 ---
 
@@ -1639,6 +1757,7 @@ RH -> 小车左右转向目标
 | 按键扫描       |   1 ms |
 | 蓝牙解析       |   5 ms |
 | OLED 刷新    | 100 ms |
+| 启动前 GY 零偏标定 | 2 s（200 × 10 ms） |
 
 ---
 
@@ -1662,6 +1781,9 @@ RH -> 小车左右转向目标
 
 4. **符合 RTOS 设计原则**
    中断短小、任务分层、优先级明确。
+
+5. **启动前姿态基准更可靠**
+   每次进入平衡模式前重新估计 `GyroYBias`，降低固定 GY 偏置对姿态积分的影响。
 
 ---
 
@@ -1696,5 +1818,11 @@ RH -> 小车左右转向目标
    * 使用 `vTaskDelayUntil()` 构建周期任务；
    * 增加错误处理任务；
    * 将参数配置单独抽象为配置管理模块。
+
+6. 可继续完善启动前标定体验：
+
+   * 标定期间增加更明确的 LED/OLED 状态提示；
+   * 增加标定取消或重新触发机制；
+   * 根据后续测试决定是否保留 2 s 标定时长，或将其参数化。
 
 ---
