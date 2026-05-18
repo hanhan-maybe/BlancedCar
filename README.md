@@ -1,180 +1,125 @@
 # FreeRTOSBlancedCar
 
-* [FreeRTOSBlancedCar](#freertosblancedcar)
+## 目录
 
-  * [一、项目简介](#一项目简介)
-  * [二、工程整体功能说明](#二工程整体功能说明)
-
-    * [1. 系统总体功能](#1-系统总体功能)
-    * [2. 系统软件架构](#2-系统软件架构)
-    * [3. 工程运行流程](#3-工程运行流程)
-    * [4. 控制系统总体框架](#4-控制系统总体框架)
-    * [5. 工程目录结构](#5-工程目录结构)
-  * [三、FreeRTOS任务设计说明](#三freertos任务设计说明)
-
-    * [1. 任务总体划分](#1-任务总体划分)
-    * [2. ControlTask：实时控制任务](#2-controltask实时控制任务)
-    * [3. KeyLedTask：按键与LED任务](#3-keyledtask按键与led任务)
-    * [4. DisplayTask：OLED显示任务](#4-displaytaskoled显示任务)
-    * [5. CommTask：蓝牙通信解析任务](#5-commtask蓝牙通信解析任务)
-    * [6. TIM1中断与任务通知机制](#6-tim1中断与任务通知机制)
-  * [四、硬件模块与工程文件对应关系](#四硬件模块与工程文件对应关系)
-  * [五、各硬件模块详细说明](#五各硬件模块详细说明)
-
-    * [1. MPU6050姿态检测模块](#1-mpu6050姿态检测模块)
-    * [2. 软件I2C通信模块](#2-软件i2c通信模块)
-    * [3. 电机驱动与PWM输出模块](#3-电机驱动与pwm输出模块)
-    * [4. 编码器测速模块](#4-编码器测速模块)
-    * [5. 按键输入模块](#5-按键输入模块)
-    * [6. LED运行状态指示模块](#6-led运行状态指示模块)
-    * [7. OLED数据显示模块](#7-oled数据显示模块)
-    * [8. 普通串口调试模块](#8-普通串口调试模块)
-    * [9. 蓝牙串口通信模块](#9-蓝牙串口通信模块)
-    * [10. 定时器调度模块](#10-定时器调度模块)
-  * [六、控制算法说明](#六控制算法说明)
-
-    * [1. 三环控制结构](#1-三环控制结构)
-    * [2. 姿态角估计](#2-姿态角估计)
-    * [3. 角度环PID](#3-角度环pid)
-    * [4. 速度环PID](#4-速度环pid)
-    * [5. 转向环PID](#5-转向环pid)
-    * [6. PID通用实现](#6-pid通用实现)
-  * [七、FreeRTOS配置说明](#七freertos配置说明)
-
-    * [1. 系统节拍与调度方式](#1-系统节拍与调度方式)
-    * [2. 动态堆配置](#2-动态堆配置)
-    * [3. 中断优先级配置](#3-中断优先级配置)
-    * [4. Hook函数](#4-hook函数)
-  * [八、主程序执行流程](#八主程序执行流程)
-  * [九、蓝牙通信协议说明](#九蓝牙通信协议说明)
-  * [十、关键文件功能速查表](#十关键文件功能速查表)
-  * [十一、当前工程特点与阶段性改造结果](#十一当前工程特点与阶段性改造结果)
+- [一、项目简介](#一项目简介)
+- [二、项目功能](#二项目功能)
+- [三、硬件平台与软件架构](#三硬件平台与软件架构)
+  - [1. 硬件组成](#1-硬件组成)
+  - [2. 软件总体架构](#2-软件总体架构)
+  - [3. 工程目录结构](#3-工程目录结构)
+- [四、系统运行流程](#四系统运行流程)
+- [五、FreeRTOS 任务设计](#五freertos-任务设计)
+  - [1. 任务划分](#1-任务划分)
+  - [2. ControlTask：实时控制任务](#2-controltask实时控制任务)
+  - [3. KeyLedTask：按键与 LED 任务](#3-keyledtask按键与-led-任务)
+  - [4. DisplayTask：OLED 显示任务](#4-displaytaskoled-显示任务)
+  - [5. CommTask：蓝牙通信解析任务](#5-commtask蓝牙通信解析任务)
+  - [6. TIM1 中断与任务通知机制](#6-tim1-中断与任务通知机制)
+- [六、姿态解算与平衡控制](#六姿态解算与平衡控制)
+  - [1. MPU6050 姿态采集](#1-mpu6050-姿态采集)
+  - [2. GY 启动前静止零偏标定](#2-gy-启动前静止零偏标定)
+  - [3. MPU6050 采样率与数字低通滤波优化](#3-mpu6050-采样率与数字低通滤波优化)
+  - [4. 互补滤波姿态角估计](#4-互补滤波姿态角估计)
+  - [5. 三环串级 PID 控制](#5-三环串级-pid-控制)
+  - [6. BalanceAngleTrim 静态平衡角补偿](#6-balanceangletrim-静态平衡角补偿)
+  - [7. 外环周期优化](#7-外环周期优化)
+- [七、按键、通信与可视化调试](#七按键通信与可视化调试)
+  - [1. 稳定计数式按键消抖](#1-稳定计数式按键消抖)
+  - [2. 蓝牙在线调参与遥控协议](#2-蓝牙在线调参与遥控协议)
+  - [3. OLED 实时显示](#3-oled-实时显示)
+  - [4. 串口调试注意事项](#4-串口调试注意事项)
+- [八、硬件模块与工程文件对应关系](#八硬件模块与工程文件对应关系)
+- [九、关键优化与效果总结](#九关键优化与效果总结)
+- [十、关键文件功能速查表](#十关键文件功能速查表)
+- [十一、当前工程特点](#十一当前工程特点)
+- [十二、后续可继续优化方向](#十二后续可继续优化方向)
 
 ---
 
-# FreeRTOSBlancedCar
+# 一、项目简介
 
-本项目是一个基于 **STM32F103C8T6 + FreeRTOS** 的两轮自平衡小车控制系统。
-系统通过 **MPU6050姿态传感器** 获取车体倾角，通过 **编码器** 获取左右轮速度，通过 **串级 PID 控制算法** 计算电机输出，最终实现：
+本项目是一个基于 **STM32F103C8T6 + FreeRTOS** 的两轮自平衡小车控制系统。  
+系统通过 **MPU6050 姿态传感器** 获取车体俯仰姿态，通过 **编码器** 获取左右轮速度，利用 **角度环—速度环—转向环** 串级 PID 控制算法计算电机输出，实现两轮倒立摆系统的稳定控制。
+
+当前工程可实现：
 
 1. 小车直立自平衡；
-2. 前进与后退速度控制；
+2. 前进、后退速度控制；
 3. 左右转向控制；
-4. OLED 实时数据显示；
-5. 蓝牙串口在线调参与遥控；
-6. 按键启停与 LED 状态指示；
-7. 按键启动前的 **2 s GY 静止零偏标定**；
-8. 基于 FreeRTOS 的任务化软件架构；
-9. 基于 TIM1 中断通知的周期控制任务调度。
+4. 蓝牙串口在线 PID 调参；
+5. 手机摇杆遥控；
+6. OLED 实时状态显示；
+7. 按键启停与 LED 状态指示；
+8. 按键启动前 **2 s GY 静止零偏标定**；
+9. FreeRTOS 多任务调度；
+10. TIM1 中断通知驱动的周期控制任务。
 
-与原始裸机版本相比，当前工程的主要变化是：
+项目后续还围绕“小车静止平衡品质”进行了多轮优化，包括：
 
-* 原来由 `while(1)` 和 `TIM1` 中断共同承担的大量逻辑，已拆分为多个 FreeRTOS 任务；
-* 实时控制逻辑从中断服务函数中迁移至 `ControlTask`；
-* `TIM1` 中断不再直接进行姿态解算和 PID 计算，而是仅用于**周期性唤醒控制任务**；
-* OLED 显示、按键处理、蓝牙命令解析分别运行于独立任务中，软件结构更清晰，后续扩展性更好；
-* 平衡启动流程由“按键后立即运行”改为“**按键请求标定 → ControlTask 完成 200 次 GY 采样 → 计算零偏 → 再进入平衡模式**”，降低固定陀螺零偏带来的姿态误差。
-
----
-
-## 一、项目简介
-
-两轮平衡车本质上属于典型的 **倒立摆闭环控制系统**。
-车体只有两个轮子支撑，在重力作用下天然不稳定，因此需要通过高频反馈控制，使电机及时补偿车体倾倒趋势，从而维持动态平衡。
-
-本工程采用的基本控制思路为：
-
-* **MPU6050** 采集加速度与角速度；
-* 启动平衡前对俯仰轴陀螺仪 `GY` 进行 **2 s 静止零偏标定**；
-* 使用补偿后的 `GYCorrected` 与加速度角进行 **互补滤波**，估计车体倾角；
-* 使用 **角度环 PID** 保持车体直立；
-* 使用 **速度环 PID** 控制前进、后退与停车；
-* 使用 **转向环 PID** 控制左右差速；
-* 使用 **PWM + 电机方向控制** 输出执行量；
-* 使用 **FreeRTOS 多任务机制** 分离实时控制、交互、显示与通信；
-* 使用 **TIM1 更新中断 + 任务通知** 实现 10 ms 控制周期驱动。
+- 按键消抖优化；
+- 陀螺仪 GY 零偏自适应标定；
+- MPU6050 数字低通滤波与采样率匹配；
+- 静态平衡角补偿 `BalanceAngleTrim`；
+- 速度环与转向环周期由 **50 ms 缩短至 30 ms**；
+- 静止平衡时 `Angle` 摆动峰峰值由约 **2.0°** 降至约 **1.5°**，摆动幅度下降约 **25%**。
 
 ---
 
-## 二、工程整体功能说明
+# 二、项目功能
 
-### 1. 系统总体功能
+## 1. 姿态检测与融合
+- 读取 MPU6050 三轴加速度与三轴角速度；
+- 使用 `AX / AZ` 计算加速度倾角 `AngleAcc`；
+- 使用俯仰轴陀螺仪 `GY` 计算积分角 `AngleGyro`；
+- 采用互补滤波融合加速度角与陀螺积分角，获得最终姿态角 `Angle`。
 
-整个工程可划分为五类功能：
+## 2. 三环闭环控制
+- **角度环 PID**：维持小车直立；
+- **速度环 PID**：调节前后运动与停车；
+- **转向环 PID**：通过左右轮差速实现转向。
 
-#### 1）姿态检测功能
+## 3. 交互与调试
+- 按键启动/停止；
+- LED 显示运行状态；
+- OLED 显示姿态、速度、PID 参数与控制输出；
+- 蓝牙串口支持在线调参与摇杆遥控。
 
-负责从 MPU6050 读取：
-
-* 三轴加速度：`AX`、`AY`、`AZ`
-* 三轴角速度：`GX`、`GY`、`GZ`
-
-并计算：
-
-* 加速度倾角 `AngleAcc`
-* GY 原始量 `GYRaw`
-* 启动前标定得到的 GY 零偏 `GyroYBias`
-* 零偏补偿后的角速度量 `GYCorrected`
-* 角速度积分角 `AngleGyro`
-* 融合后的车体姿态角 `Angle`
-
----
-
-#### 2）闭环控制功能
-
-根据姿态、速度与转向反馈完成三环控制：
-
-* 角度环：保持平衡；
-* 速度环：控制前进后退；
-* 转向环：控制左右差速。
+## 4. 系统优化
+- 启动前 GY 零偏自标定；
+- MPU6050 DLPF 低通滤波；
+- 静态平衡角补偿；
+- 外环周期优化；
+- 按键稳定计数消抖；
+- 串口调试问题定位与修复。
 
 ---
 
-#### 3）人机交互功能
+# 三、硬件平台与软件架构
 
-包括：
+## 1. 硬件组成
 
-* 按键启停；
-* LED 显示运行/停止状态；
-* OLED 显示控制参数和实时状态；
-* 蓝牙在线调参与遥控。
-
----
-
-#### 4）底层外设驱动功能
-
-包括：
-
-* 软件 I2C；
-* USART1 调试串口；
-* USART2 蓝牙串口；
-* TIM1 周期中断；
-* TIM2 PWM 输出；
-* TIM3/TIM4 编码器测速；
-* GPIO 电机方向控制。
+| 模块 | 作用 |
+|---|---|
+| STM32F103C8T6 | 主控芯片 |
+| MPU6050 | 姿态检测 |
+| 直流减速电机 | 小车执行机构 |
+| 编码器 | 轮速反馈 |
+| 电机驱动模块 | 电机正反转与调速 |
+| OLED 屏幕 | 状态显示 |
+| 按键模块 | 启停控制 |
+| LED | 运行状态指示 |
+| 蓝牙串口模块 | 在线调参、遥控 |
+| USART1 调试串口 | 调试输出 |
 
 ---
 
-#### 5）FreeRTOS 任务调度功能
-
-通过任务划分实现：
-
-* 控制任务高优先级运行；
-* 按键与 LED 任务周期执行；
-* OLED 低频刷新；
-* 蓝牙数据独立解析；
-* 中断只承担最小化触发职责。
-
----
-
-### 2. 系统软件架构
-
-当前工程已由裸机轮询式结构升级为 FreeRTOS 任务化结构：
+## 2. 软件总体架构
 
 ```text
                     ┌─────────────────────┐
-                    │      main()         │
-                    │ 系统初始化 + 建立任务 │
+                    │       main()        │
+                    │ 外设初始化 + 创建任务 │
                     └──────────┬──────────┘
                                │
                                ▼
@@ -182,12 +127,12 @@
                     │ vTaskStartScheduler │
                     └──────────┬──────────┘
                                │
-        ┌──────────────────────┼──────────────────────┐
-        ▼                      ▼                      ▼
-┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│ ControlTask  │      │ KeyLedTask   │      │ DisplayTask  │
-│ 最高优先级    │      │ 按键+LED     │      │ OLED刷新      │
-└──────┬───────┘      └──────────────┘      └──────────────┘
+       ┌───────────────────────┼────────────────────────┐
+       ▼                       ▼                        ▼
+┌──────────────┐       ┌──────────────┐         ┌──────────────┐
+│ ControlTask  │       │ KeyLedTask   │         │ DisplayTask  │
+│ 最高优先级    │       │ 按键+LED     │         │ OLED刷新      │
+└──────┬───────┘       └──────────────┘         └──────────────┘
        ▲
        │ 任务通知
        │
@@ -196,81 +141,21 @@
 │ 10ms周期触发 │
 └──────────────┘
 
-                ┌──────────────┐
-                │ CommTask     │
-                │ 蓝牙命令解析 │
-                └──────────────┘
+                  ┌──────────────┐
+                  │ CommTask     │
+                  │ 蓝牙命令解析 │
+                  └──────────────┘
 ```
 
 ---
 
-### 3. 工程运行流程
-
-系统启动后的总体流程如下：
-
-1. 进入 `main()`；
-2. 初始化各外设模块：
-
-   * OLED；
-   * MPU6050；
-   * 蓝牙串口；
-   * LED；
-   * 按键；
-   * 电机；
-   * 编码器；
-   * 普通调试串口；
-3. 初始化 `TIM1` 定时中断；
-4. 创建 FreeRTOS 应用任务；
-5. 启动 FreeRTOS 调度器；
-6. 系统进入多任务运行状态：
-
-   * `ControlTask` 等待 TIM1 中断通知；
-   * `KeyLedTask` 每 1 ms 执行按键扫描与 LED 更新；
-   * `DisplayTask` 每 100 ms 刷新 OLED；
-   * `CommTask` 每 5 ms 轮询并解析蓝牙数据；
-7. 用户按下 Key1 后，不直接进入平衡，而是先置位 `GyroCalibRequest`；
-8. `ControlTask` 按 10 ms 控制节拍累计 200 次 `GY` 原始值，约 2 s 后计算 `GyroYBias`；
-9. 标定完成后，系统重新初始化三环 PID、清零遥控目标与差速输出，并令 `RunFlag = 1`，正式进入平衡模式。
-
----
-
-### 4. 控制系统总体框架
-
-项目采用典型的 **三环串级控制结构**：
-
-```text
-蓝牙遥控输入
-   │
-   ├── 速度目标 SpeedPID.Target ──> 速度环 PID ──> AnglePID.Target
-   │
-   └── 转向目标 TurnPID.Target ──> 转向环 PID ──> DifPWM
-
-MPU6050姿态角 Angle ──> 角度环 PID ──> AvePWM
-
-AvePWM ± DifPWM/2
-   │
-   ├── LeftPWM  ──> 左电机
-   └── RightPWM ──> 右电机
-```
-
-其中：
-
-* **角度环** 是最内层、最高实时性的控制环；
-* **速度环** 用于动态调整角度环目标值；
-* **转向环** 用于输出左右轮差速量。
-
----
-
-### 5. 工程目录结构
+## 3. 工程目录结构
 
 ```text
 BlancedCar
-├── Start/                    # 启动文件、系统时钟、Cortex-M3支持
-├── Library/                  # STM32F10x标准外设库
-├── FreeRTOS/                 # FreeRTOS内核与堆管理
-│   ├── include/
-│   ├── source/
-│   └── portable/
+├── Start/                    # 启动文件、系统时钟与 Cortex-M3 支持
+├── Library/                  # STM32F10x 标准外设库
+├── FreeRTOS/                 # FreeRTOS 内核与堆管理
 ├── System/                   # 系统级功能模块
 │   ├── Delay.c/h
 │   └── Timer.c/h
@@ -295,1360 +180,391 @@ BlancedCar
 │   ├── FreeRTOSHooks.c
 │   ├── stm32f10x_it.c/h
 │   └── stm32f10x_conf.h
-├── Project.uvprojx           # Keil工程文件
+├── Project.uvprojx
 └── README.md
 ```
 
 ---
 
-## 三、FreeRTOS任务设计说明
+# 四、系统运行流程
 
-### 1. 任务总体划分
+```text
+系统上电
+│
+├── 初始化 OLED、MPU6050、蓝牙串口、LED、按键、电机、编码器、调试串口
+├── 初始化 TIM1 定时器
+├── 创建 FreeRTOS 任务
+├── 启动调度器
+│
+└── 等待按键启动
+    │
+    ├── Key1 触发
+    ├── 进入 GY 零偏标定状态
+    ├── ControlTask 以 10 ms 周期采样 GY
+    ├── 200 次采样完成，历时约 2 s
+    ├── 计算 GyroYBias
+    ├── 初始化角度环、速度环、转向环 PID
+    └── RunFlag = 1，正式进入平衡控制
+```
 
-当前工程创建了 4 个任务：
+---
 
-| 任务名       | 任务函数              | 优先级 | 栈大小 | 主要功能                |
-| --------- | ----------------- | --: | --: | ------------------- |
-| `Control` | `AppTask_Control` |   5 | 512 | 姿态解算、三环控制、电机输出      |
-| `KeyLed`  | `AppTask_KeyLed`  |   3 | 256 | 按键扫描、运行状态切换、LED控制   |
-| `Comm`    | `AppTask_Comm`    |   2 | 512 | 蓝牙数据包解析、在线调参、遥控目标更新 |
-| `Display` | `AppTask_Display` |   1 | 512 | OLED 实时数据显示         |
+# 五、FreeRTOS 任务设计
 
-任务优先级设计思路：
+## 1. 任务划分
+
+| 任务名 | 任务函数 | 优先级 | 栈大小 | 主要功能 |
+|---|---|---:|---:|---|
+| Control | `AppTask_Control` | 5 | 512 | 姿态解算、控制算法、电机输出 |
+| KeyLed | `AppTask_KeyLed` | 3 | 256 | 按键扫描、LED 状态、启停逻辑 |
+| Comm | `AppTask_Comm` | 2 | 512 | 蓝牙命令解析、在线调参、遥控目标更新 |
+| Display | `AppTask_Display` | 1 | 512 | OLED 状态显示 |
+
+任务优先级关系：
 
 ```text
 ControlTask > KeyLedTask > CommTask > DisplayTask
 ```
 
-其中：
-
-* 控制任务必须具有最高优先级；
-* 按键响应重要但非强实时；
-* 蓝牙解析属于普通业务逻辑；
-* OLED 显示刷新较慢，优先级最低。
-
 ---
 
-### 2. ControlTask：实时控制任务
+## 2. ControlTask：实时控制任务
 
-#### 2.1 任务触发方式
-
-`ControlTask` 不使用普通 `vTaskDelay()` 周期运行，而是：
-
-* 阻塞等待任务通知；
-* 由 `TIM1_UP_IRQHandler()` 每 10 ms 唤醒一次。
-
-核心代码逻辑：
+### 2.1 触发方式
+`ControlTask` 不依赖普通延时，而是阻塞等待 TIM1 中断通知：
 
 ```c
-uint32_t NotifyCount = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 ```
 
-如果通知累计次数大于 1：
+TIM1 每 **10 ms** 触发一次中断，唤醒控制任务。
 
-```c
-if (NotifyCount > 1)
-{
-    TimerErrorFlag = 1;
-}
-```
+### 2.2 10 ms 执行内容
+每个控制周期完成：
 
-说明控制任务可能未能在上一个 10 ms 周期内及时完成，出现节拍积压。
+1. MPU6050 数据读取；
+2. GY 零偏补偿；
+3. 姿态角解算与互补滤波；
+4. 倾倒保护判断；
+5. 角度环 PID；
+6. 电机 PWM 计算与输出。
 
----
-
-#### 2.2 10 ms 控制内容
-
-每收到一次任务通知，执行一次：
-
-1. 读取 MPU6050 数据；
-2. 保存 `GYRaw`，并基于 `GyroYBias` 计算 `GYCorrected`；
-3. 计算加速度角 `AngleAcc`；
-4. 使用补偿后的 `GYCorrected` 计算角速度积分角 `AngleGyro`；
-5. 执行互补滤波得到姿态角 `Angle`；
-6. 判断倾角是否越界；
-7. 在 `RunFlag = 1` 时执行角度环 PID；
-8. 计算左右轮 PWM 并输出电机驱动。
-
----
-
-#### 2.3 启动前 2 s GY 静止零偏标定
-
-当 Key1 在停止状态下触发后，系统不会立即令 `RunFlag = 1`，而是由 `KeyLedTask` 置位：
-
-```c
-GyroCalibRequest = 1;
-```
-
-随后 `ControlTask` 在 10 ms 周期内完成非阻塞采样：
-
-```c
-#define GYRO_Y_CALIB_SAMPLE_NUM 200
-```
-
-即：
+### 2.3 30 ms 执行内容
+速度环与转向环由 10 ms 控制任务内部计数触发：
 
 ```text
-200 次 × 10 ms = 2 s
+3 × 10 ms = 30 ms
 ```
 
-标定期间系统累计 `GY` 原始值：
+每 30 ms 执行：
 
-```c
-GyroYSum += GY;
-GyroYSampleCount++;
-```
-
-采样完成后计算：
-
-```c
-GyroYBias = (float)GyroYSum / GYRO_Y_CALIB_SAMPLE_NUM;
-```
-
-随后执行：
-
-1. 清除标定请求与忙状态；
-2. `PID_Init(&AnglePID)`、`PID_Init(&SpeedPID)`、`PID_Init(&TurnPID)`；
-3. 清零 `SpeedPID.Target`、`TurnPID.Target` 与 `DifPWM`；
-4. 将融合角状态重新对齐到当前加速度角，避免旧姿态状态残留；
-5. 设置 `RunFlag = 1`，进入平衡模式。
+1. 左右轮编码器速度读取；
+2. 平均速度 `AveSpeed` 计算；
+3. 差速 `DifSpeed` 计算；
+4. 速度环 PID；
+5. 转向环 PID；
+6. 更新角度环目标值与差速 PWM。
 
 ---
 
-#### 2.4 50 ms 控制内容
+## 3. KeyLedTask：按键与 LED 任务
 
-控制任务内部使用 `SpeedTurnCount` 计数：
-
-```c
-SpeedTurnCount++;
-if (SpeedTurnCount >= 5)
+### 3.1 执行周期
+```text
+1 ms
 ```
 
-由于 `ControlTask` 周期为 10 ms，因此每 5 次即为：
+### 3.2 功能
+- 调用 `Key_Tick()` 执行按键检测；
+- 读取按键事件；
+- 控制小车启停；
+- 控制 LED 状态显示。
+
+### 3.3 启动逻辑
+停止状态下按下 Key1：
 
 ```text
-10 ms × 5 = 50 ms
+触发 GY 标定请求
+而不是直接进入 RunFlag = 1
 ```
 
-此时执行：
-
-1. 编码器速度采样；
-2. 平均速度与差速计算；
-3. 速度环 PID；
-4. 转向环 PID。
-
----
-
-### 3. KeyLedTask：按键与LED任务
-
-#### 3.1 执行周期
-
-```c
-vTaskDelay(pdMS_TO_TICKS(1));
-```
-
-即约每 1 ms 执行一次。
-
----
-
-#### 3.2 任务内容
-
-1. 调用 `Key_Tick()` 实现按键扫描与稳定计数式消抖；
-2. 根据 `RunFlag` 控制 LED：
-
-   * `RunFlag = 1`：LED 亮；
-   * `RunFlag = 0`：LED 灭；
-3. 读取按键编号：
-
-   ```c
-   KeyNum = Key_GetNum();
-   ```
-4. 若检测到 1 号按键：
-
-   * 当前停止 → 不直接运行，而是发出 `GyroCalibRequest = 1`，请求启动前 GY 零偏标定；
-   * 当前运行 → 立即停止，并清零 `SpeedPID.Target`、`TurnPID.Target` 与 `DifPWM`。
-
----
-
-#### 3.3 按键控制逻辑
+运行状态下再次按下 Key1：
 
 ```text
-按键1松手触发
-   │
-   ├── 小车停止状态
-   │      └── 请求 2 s GY 静止零偏标定
-   │              └── 标定完成后 RunFlag = 1
-   │
-   └── 小车运行状态
-          └── RunFlag = 0，并清除遥控目标与差速输出
+RunFlag = 0
+电机停止
 ```
 
 ---
 
-### 4. DisplayTask：OLED显示任务
+## 4. DisplayTask：OLED 显示任务
 
-#### 4.1 执行周期
+### 4.1 执行周期
+```text
+100 ms
+```
+
+### 4.2 显示内容
+OLED 用于实时显示：
+
+- `AnglePID.Kp / Ki / Kd`
+- `AnglePID.Target`
+- `Angle`
+- `AnglePID.Out`
+- `GYCorrected`
+- 速度环与转向环参数
+- 平均速度、差速与输出
+- GY 标定状态提示等
+
+---
+
+## 5. CommTask：蓝牙通信解析任务
+
+### 5.1 执行周期
+```text
+5 ms
+```
+
+### 5.2 功能
+解析蓝牙串口接收到的数据包，支持：
+
+- `slider`：在线调 PID 参数；
+- `joystick`：更新速度目标与转向目标；
+- `key`：预留扩展命令。
+
+---
+
+## 6. TIM1 中断与任务通知机制
+
+TIM1 的职责被压缩为：
+
+> **每 10 ms 产生一次更新中断，并通知 ControlTask 执行控制算法。**
+
+中断只完成：
+- 清除更新标志；
+- 调用 `vTaskNotifyGiveFromISR()`；
+- 必要时触发任务切换。
+
+这种处理方式可以显著缩短中断执行时间，避免在 ISR 中直接进行复杂控制运算。
+
+---
+
+# 六、姿态解算与平衡控制
+
+## 1. MPU6050 姿态采集
+
+当前工程使用：
+
+- `AX`、`AZ`：计算加速度倾角；
+- `GY`：俯仰轴角速度，用于陀螺积分。
+
+---
+
+## 2. GY 启动前静止零偏标定
+
+### 2.1 原始问题
+早期版本直接使用固定补偿：
 
 ```c
-vTaskDelay(pdMS_TO_TICKS(100));
+GY -= 16;
 ```
 
-即每 100 ms 刷新一次 OLED。
+该方式依赖经验值，不能适应不同上电时刻和传感器状态。
 
----
-
-#### 4.2 显示内容
-
-OLED 分三栏显示；代码中还加入了启动前 GY 标定状态提示字符串 `GY CAL...` 的输出逻辑：
-
-##### 角度环区域
-
-* `AnglePID.Kp`
-* `AnglePID.Ki`
-* `AnglePID.Kd`
-* 角度目标值 `AnglePID.Target`
-* 实际角度 `Angle`
-* 角度环输出 `AnglePID.Out`
-* 补偿后的陀螺仪量 `GYCorrected`
-* 输出偏置 `OutOffset`
-
-##### 速度环区域
-
-* `SpeedPID.Kp`
-* `SpeedPID.Ki`
-* `SpeedPID.Kd`
-* 速度目标 `SpeedPID.Target`
-* 平均速度 `AveSpeed`
-* 输出 `SpeedPID.Out`
-
-##### 转向环区域
-
-* `TurnPID.Kp`
-* `TurnPID.Ki`
-* `TurnPID.Kd`
-* 转向目标 `TurnPID.Target`
-* 实际差速 `DifSpeed`
-* 输出 `TurnPID.Out`
-
----
-
-#### 4.3 堆空间调试预留
-
-代码中保留了 FreeRTOS 堆空间观察逻辑：
-
-```c
-xPortGetFreeHeapSize();
-xPortGetMinimumEverFreeHeapSize();
-```
-
-当前被注释，可在需要时恢复，用于评估：
-
-* 当前剩余堆；
-* 系统启动以来的最小剩余堆。
-
----
-
-### 5. CommTask：蓝牙通信解析任务
-
-#### 5.1 执行周期
-
-```c
-vTaskDelay(pdMS_TO_TICKS(5));
-```
-
-即每 5 ms 检查一次是否收到完整蓝牙数据包。
-
----
-
-#### 5.2 当前解析的命令类型
-
-支持三类标签：
+### 2.2 优化方案
+按键启动前进行静止零偏标定：
 
 ```text
-key
-slider
-joystick
+采样周期：10 ms
+采样次数：200 次
+总时长：约 2 s
 ```
 
----
-
-#### 5.3 `slider`：在线调参
-
-可修改：
-
-* `AngleKp`
-* `AngleKi`
-* `AngleKd`
-* `SpeedKp`
-* `SpeedKi`
-* `SpeedKd`
-* `TurnKp`
-* `TurnKi`
-* `TurnKd`
-* `Offset`
-
-例如：
-
-```text
-[slider,AngleKp,2.4]
-[slider,SpeedKi,0.10]
-[slider,Offset,3]
-```
-
----
-
-#### 5.4 `joystick`：遥控目标更新
-
-数据格式：
-
-```text
-[joystick,LH,LV,RH,RV]
-```
-
-其中当前工程实际使用：
-
-* `LV` → 速度目标；
-* `RH` → 转向目标。
-
-映射关系：
+计算：
 
 ```c
-SpeedPID.Target = LV / 25.0f;
-TurnPID.Target = RH / 25.0f;
-```
-
----
-
-#### 5.5 `key`：预留接口
-
-代码中已解析 `key` 命令，但目前未执行具体动作，属于后续扩展接口。
-
----
-
-### 6. TIM1中断与任务通知机制
-
-#### 6.1 TIM1功能定位
-
-当前 `TIM1` 的职责已经被简化为：
-
-> **每 10 ms 产生一次更新中断，并向 ControlTask 发送任务通知。**
-
----
-
-#### 6.2 中断服务函数
-
-```c
-void TIM1_UP_IRQHandler(void)
-{
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-
-    if (TIM_GetITStatus(TIM1, TIM_IT_Update) == SET)
-    {
-        TIM_ClearITPendingBit(TIM1, TIM_IT_Update);
-
-        if (ControlTaskHandle != NULL)
-        {
-            vTaskNotifyGiveFromISR(
-                ControlTaskHandle,
-                &xHigherPriorityTaskWoken
-            );
-        }
-
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    }
-}
-```
-
----
-
-#### 6.3 改造意义
-
-原来中断中直接执行姿态解算和 PID 运算，存在：
-
-* 中断执行时间长；
-* 后续扩展困难；
-* 与 FreeRTOS 调度冲突风险更高。
-
-当前改造后：
-
-* 中断函数非常短；
-* 实际控制逻辑在线程上下文执行；
-* 与 FreeRTOS 的系统设计更匹配；
-* 便于后续加入队列、事件组或控制状态机。
-
----
-
-## 四、硬件模块与工程文件对应关系
-
-| 模块            | 主要作用              | 对应文件                                |
-| ------------- | ----------------- | ----------------------------------- |
-| MPU6050 姿态传感器 | 获取加速度、角速度         | `Hardware/MPU6050.c/h`              |
-| 软件 I2C        | 与 MPU6050 通信      | `Hardware/MyI2C.c/h`                |
-| 电机方向控制        | 控制左右电机正反转         | `Hardware/Motor.c/h`                |
-| PWM 调速        | 输出电机占空比           | `Hardware/PWM.c/h`                  |
-| 编码器测速         | 获取左右轮转速           | `Hardware/Encoder.c/h`              |
-| 按键输入          | 启停控制与预留按键         | `Hardware/Key.c/h`                  |
-| LED 指示        | 显示运行状态            | `Hardware/LED.c/h`                  |
-| OLED 显示       | 显示控制参数与状态         | `Hardware/OLED.c/h`、`OLED_Data.c/h` |
-| 普通串口          | 串口调试、`printf` 重定向 | `Hardware/Serial.c/h`               |
-| 蓝牙串口          | 在线调参、遥控           | `Hardware/BlueSerial.c/h`           |
-| TIM1 定时器      | 10 ms 控制任务触发      | `System/Timer.c/h`                  |
-| PID 算法        | 三环控制算法            | `User/PID.c/h`                      |
-| 全局应用数据        | 公共状态变量、PID实例      | `User/AppData.c/h`                  |
-| FreeRTOS 任务   | 任务创建与任务函数         | `User/FreeRTOSTasks.c/h`            |
-| FreeRTOS 配置   | 内核参数配置            | `User/FreeRTOSConfig.h`             |
-| Hook 函数       | 堆失败、栈溢出处理         | `User/FreeRTOSHooks.c`              |
-| 主程序           | 初始化与调度器启动         | `User/main.c`                       |
-
----
-
-## 五、各硬件模块详细说明
-
-## 1. MPU6050姿态检测模块
-
-### 1.1 模块作用
-
-MPU6050 用于测量车体运动状态，读取：
-
-* 加速度：`AX`、`AY`、`AZ`
-* 角速度：`GX`、`GY`、`GZ`
-
-当前平衡姿态主要使用：
-
-* `AX` 与 `AZ` 计算加速度倾角；
-* `GY` 作为俯仰轴角速度原始量；
-* 启动前 2 s 静止标定得到的 `GyroYBias`；
-* 零偏补偿后的 `GYCorrected` 进行角速度积分。
-
----
-
-### 1.2 GY 启动前静止零偏标定
-
-终版工程不再采用固定写死的 `GY -= 16`。当前方案为：
-
-1. 用户在停止状态下按下 Key1；
-2. `KeyLedTask` 仅发出标定请求；
-3. `ControlTask` 在 10 ms 周期内连续采样 200 次 `GY`；
-4. 计算平均值作为 `GyroYBias`；
-5. 运行时使用：
-
-```c
+GyroYBias = GyroYSum / 200.0f;
 GYCorrected = GYRaw - GyroYBias;
 ```
 
-6. 再令 `RunFlag = 1`，进入平衡控制。
-
-该流程使每次进入平衡模式前，都基于当前实际传感器状态估计俯仰轴陀螺零偏，避免长期依赖固定经验补偿值。
+### 2.3 优化意义
+- 减少固定经验零偏带来的积分误差；
+- 提升每次启动时姿态估计的一致性；
+- 增强系统对传感器状态变化的适应能力。
 
 ---
 
-### 1.3 数据读取方式
+## 3. MPU6050 采样率与数字低通滤波优化
 
-工程使用连续寄存器读取：
+### 3.1 最终配置
 
 ```c
-MPU6050_ReadRegs(MPU6050_ACCEL_XOUT_H, Data, 14);
+MPU6050_WriteReg(MPU6050_SMPLRT_DIV, 0x09);
+MPU6050_WriteReg(MPU6050_CONFIG, 0x02);
 ```
 
-一次读取 14 字节，提高通信效率。
+### 3.2 配置目的
+- 使 MPU6050 输出频率与 **100 Hz 控制周期** 更匹配；
+- 启用适度数字低通滤波；
+- 降低静止状态下 `GY` 的高频波动。
+
+### 3.3 实测现象
+修改后，静止状态下 `GY` 变化幅度明显下降，姿态信号更加平稳。
 
 ---
 
-### 1.4 配置参数
+## 4. 互补滤波姿态角估计
 
-初始化中配置：
+### 4.1 加速度角
 
 ```c
-MPU6050_PWR_MGMT_1 = 0x01
-MPU6050_PWR_MGMT_2 = 0x00
-MPU6050_SMPLRT_DIV = 0x07
-MPU6050_CONFIG = 0x00
-MPU6050_GYRO_CONFIG = 0x18
-MPU6050_ACCEL_CONFIG = 0x18
-```
-
-其中：
-
-* 陀螺仪量程配置为 ±2000°/s；
-* 加速度计量程配置为 ±16g。
-
----
-
-### 1.5 对应工程文件
-
-```text
-Hardware/MPU6050.c
-Hardware/MPU6050.h
-Hardware/MPU6050_Reg.h
-```
-
----
-
-## 2. 软件I2C通信模块
-
-### 2.1 模块作用
-
-`MyI2C.c` 使用 GPIO 模拟 I2C 时序，与 MPU6050 通信。
-
----
-
-### 2.2 引脚配置
-
-```text
-PB10 -> SCL
-PB11 -> SDA
-```
-
-均采用：
-
-```c
-GPIO_Mode_Out_OD
-```
-
-即开漏输出。
-
----
-
-### 2.3 提供的基础接口
-
-* `MyI2C_Start()`
-* `MyI2C_Stop()`
-* `MyI2C_SendByte()`
-* `MyI2C_ReceiveByte()`
-* `MyI2C_SendAck()`
-* `MyI2C_ReceiveAck()`
-
----
-
-### 2.4 对应工程文件
-
-```text
-Hardware/MyI2C.c
-Hardware/MyI2C.h
-```
-
----
-
-## 3. 电机驱动与PWM输出模块
-
-### 3.1 模块作用
-
-电机控制由两部分构成：
-
-1. `Motor.c`：控制左右电机方向；
-2. `PWM.c`：控制电机占空比。
-
----
-
-### 3.2 电机方向引脚
-
-```text
-PB12 / PB13 -> 电机1方向
-PB14 / PB15 -> 电机2方向
-```
-
----
-
-### 3.3 PWM输出
-
-使用 `TIM2`：
-
-```text
-PA0 -> TIM2_CH1
-PA1 -> TIM2_CH2
-```
-
-PWM 定时器参数：
-
-```c
-Period = 100 - 1
-Prescaler = 36 - 1
-```
-
-输出占空比范围逻辑上对应：
-
-```text
-0 ~ 100
-```
-
----
-
-### 3.4 电机输出接口
-
-```c
-Motor_SetPWM(uint8_t n, int8_t PWM);
-```
-
-其中：
-
-* `n = 1`：左侧电机；
-* `n = 2`：右侧电机；
-* `PWM > 0`：正转；
-* `PWM < 0`：反转。
-
----
-
-### 3.5 对应工程文件
-
-```text
-Hardware/Motor.c
-Hardware/Motor.h
-Hardware/PWM.c
-Hardware/PWM.h
-```
-
----
-
-## 4. 编码器测速模块
-
-### 4.1 模块作用
-
-编码器用于测量左右轮实际转速，作为速度环和转向环反馈。
-
----
-
-### 4.2 定时器资源
-
-| 电机 | 定时器  | 引脚      |
-| -- | ---- | ------- |
-| 左轮 | TIM3 | PA6、PA7 |
-| 右轮 | TIM4 | PB6、PB7 |
-
----
-
-### 4.3 工作模式
-
-使用 STM32 定时器硬件编码器接口模式：
-
-```c
-TIM_EncoderInterfaceConfig(...)
-```
-
----
-
-### 4.4 速度计算
-
-当前工程每 50 ms 读取一次脉冲数：
-
-```c
-LeftSpeed = Encoder_Get(1) / 44.0f / 0.05f / 9.27666f;
-RightSpeed = Encoder_Get(2) / 44.0f / 0.05f / 9.27666f;
-```
-
-之后计算：
-
-```c
-AveSpeed = (LeftSpeed + RightSpeed) / 2.0f;
-DifSpeed = LeftSpeed - RightSpeed;
-```
-
----
-
-### 4.5 对应工程文件
-
-```text
-Hardware/Encoder.c
-Hardware/Encoder.h
-```
-
----
-
-## 5. 按键输入模块
-
-### 5.1 模块作用
-
-按键模块负责：
-
-* 启动/停止小车；
-* 预留扩展按键输入。
-
----
-
-### 5.2 按键引脚
-
-```text
-PB1 -> Key1
-PB0 -> Key2
-PA5 -> Key3
-PA4 -> Key4
-```
-
-使用上拉输入：
-
-```c
-GPIO_Mode_IPU
-```
-
----
-
-### 5.3 按键检测机制
-
-使用 `Key_Tick()` 以固定周期运行，并采用：
-
-* 20 次计数；
-* 松手触发；
-
-实现基础消抖与事件化读取。
-
----
-
-### 5.4 当前项目中的使用方式
-
-当前仅使用：
-
-```text
-Key1
-```
-
-实现：
-
-* 停止状态下触发 → 请求启动前 2 s GY 零偏标定；
-* 标定完成后 → 进入平衡运行；
-* 运行状态下再次触发 → 停止小车。
-
----
-
-### 5.5 对应工程文件
-
-```text
-Hardware/Key.c
-Hardware/Key.h
-```
-
----
-
-## 6. LED运行状态指示模块
-
-### 6.1 模块作用
-
-LED 用于显示小车当前运行状态。
-
----
-
-### 6.2 引脚
-
-```text
-PC13
-```
-
----
-
-### 6.3 控制逻辑
-
-| RunFlag | LED |
-| ------- | --- |
-| 1       | 亮   |
-| 0       | 灭   |
-
----
-
-### 6.4 对应工程文件
-
-```text
-Hardware/LED.c
-Hardware/LED.h
-```
-
----
-
-## 7. OLED数据显示模块
-
-### 7.1 模块作用
-
-OLED 用于实时显示：
-
-* 三环 PID 参数；
-* 实际角度；
-* 速度反馈；
-* 转向差速；
-* 控制输出；
-* 输出偏置。
-
----
-
-### 7.2 刷新方式
-
-刷新逻辑由：
-
-```c
-AppTask_Display()
-```
-
-统一管理，而不再放在 `main()` 主循环中。
-
----
-
-### 7.3 对应工程文件
-
-```text
-Hardware/OLED.c
-Hardware/OLED.h
-Hardware/OLED_Data.c
-Hardware/OLED_Data.h
-```
-
----
-
-## 8. 普通串口调试模块
-
-### 8.1 模块作用
-
-普通串口 `USART1` 用于：
-
-* 基础串口调试；
-* `printf` 输出重定向；
-* 单字节接收测试。
-
----
-
-### 8.2 串口配置
-
-```text
-USART1
-PA9  -> TX
-PA10 -> RX
-BaudRate = 9600
-```
-
----
-
-### 8.3 当前工程中的状态
-
-当前 `main()` 中会执行：
-
-```c
-Serial_Init();
-```
-
-但在正式任务流程中，普通串口并未承担核心控制功能，主要作为：
-
-* 调试接口；
-* 后续日志输出接口；
-* 异常状态输出接口。
-
-因此，它不是控制闭环的必要模块，但保留具有调试价值。
-
----
-
-### 8.4 对应工程文件
-
-```text
-Hardware/Serial.c
-Hardware/Serial.h
-```
-
----
-
-## 9. 蓝牙串口通信模块
-
-### 9.1 模块作用
-
-蓝牙串口用于：
-
-* 在线修改 PID 参数；
-* 发送遥控指令；
-* 后续扩展自定义命令。
-
----
-
-### 9.2 串口配置
-
-```text
-USART2
-PA2 -> TX
-PA3 -> RX
-BaudRate = 9600
-```
-
----
-
-### 9.3 数据包协议
-
-蓝牙串口通过中断接收，并使用：
-
-```text
-[ ... ]
-```
-
-作为完整数据包边界。
-
-例如：
-
-```text
-[slider,AngleKp,2.4]
-```
-
----
-
-### 9.4 接收机制
-
-`USART2_IRQHandler()` 中完成：
-
-1. 判断包头 `'['`；
-2. 持续接收数据；
-3. 遇到包尾 `']'`；
-4. 写入字符串结束符；
-5. 置位：
-
-   ```c
-   BlueSerial_RxFlag = 1;
-   ```
-
-之后由 `CommTask` 解析。
-
----
-
-### 9.5 对应工程文件
-
-```text
-Hardware/BlueSerial.c
-Hardware/BlueSerial.h
-```
-
----
-
-## 10. 定时器调度模块
-
-### 10.1 模块作用
-
-`Timer.c` 使用 `TIM1` 产生 10 ms 周期中断，为控制任务提供稳定触发源。
-
----
-
-### 10.2 参数配置
-
-```c
-TIM_Period = 10000 - 1;
-TIM_Prescaler = 72 - 1;
-```
-
-在 72 MHz 时钟下：
-
-```text
-72 MHz / 72 = 1 MHz
-10000 个计数 = 10 ms
-```
-
----
-
-### 10.3 中断优先级
-
-```c
-NVIC_IRQChannelPreemptionPriority = 5;
-NVIC_IRQChannelSubPriority = 0;
-```
-
-该配置用于保证 TIM1 中断可安全调用：
-
-```c
-vTaskNotifyGiveFromISR()
-```
-
----
-
-### 10.4 对应工程文件
-
-```text
-System/Timer.c
-System/Timer.h
-```
-
----
-
-## 六、控制算法说明
-
-## 1. 三环控制结构
-
-本工程采用：
-
-```text
-速度环 -> 角度环
-转向环 -> 左右轮差速
-```
-
-的三环控制架构。
-
----
-
-## 2. 姿态角估计
-
-### 2.1 加速度计角度
-
-```c
-AngleAcc = -atan2((float)AX, (float)AZ) / 3.14159f * 180.0f;
+AngleAcc = -atan2(AX, AZ) / 3.14159f * 180.0f;
 AngleAcc += 2.5f;
 ```
 
-其中：
-
-* `atan2(AX, AZ)` 用于计算车体俯仰倾角；
-* `+2.5f` 为当前保留的固定姿态零点修正。
-
----
-
-### 2.2 启动前 GY 零偏标定
-
-按键启动平衡前，系统在 `ControlTask` 中累计 200 次 `GY` 原始采样，得到：
+### 4.2 陀螺积分角
 
 ```c
-GyroYBias = (float)GyroYSum / GYRO_Y_CALIB_SAMPLE_NUM;
+AngleGyro =
+    Angle
+    + GYCorrected / 32768.0f * 2000.0f * 0.01f;
 ```
 
-之后每个控制周期计算：
+### 4.3 融合角
 
 ```c
-GYCorrected = GYRaw - GyroYBias;
-```
-
-其中：
-
-* `GYRaw` 为当前读取的 `GY` 原始数据；
-* `GyroYBias` 为本次启动前估计的俯仰轴陀螺零偏；
-* `GYCorrected` 为用于姿态积分的补偿后角速度量。
-
----
-
-### 2.3 陀螺仪积分角
-
-```c
-AngleGyro = Angle + GYCorrected / 32768.0f * 2000.0f * 0.01f;
-```
-
-其中：
-
-* `2000.0f` 对应陀螺仪量程；
-* `0.01f` 对应 10 ms 控制周期；
-* 积分输入已由 `GY` 原始量切换为 `GYCorrected`。
-
----
-
-### 2.4 互补滤波
-
-```c
-float Alpha = 0.01f;
-Angle = Alpha * AngleAcc + (1.0f - Alpha) * AngleGyro;
-```
-
-即：
-
-* 低比例引入加速度计角度，抑制长期漂移；
-* 高比例保留补偿后陀螺仪积分角，保证短时动态响应。
-
----
-
-## 3. 角度环PID
-
-### 3.1 控制目的
-
-角度环控制车体保持直立，是系统最核心的控制环。
-
----
-
-### 3.2 输入与输出
-
-| 项目     | 内容                       |
-| ------ | ------------------------ |
-| 目标值    | `AnglePID.Target`        |
-| 实际值    | `Angle`                  |
-| 输出     | `AnglePID.Out`           |
-| 电机基础输出 | `AvePWM = -AnglePID.Out` |
-
----
-
-### 3.3 默认参数
-
-```c
-Kp = 2.4
-Ki = 0.25
-Kd = 6
-OutMax = 100
-OutMin = -100
-OutOffset = 3
+Angle =
+    0.01f * AngleAcc
+    + 0.99f * AngleGyro;
 ```
 
 ---
 
-## 4. 速度环PID
+## 5. 三环串级 PID 控制
 
-### 4.1 控制目的
-
-速度环用于控制小车前进、后退和定速运动，并将输出作为角度环目标值。
-
----
-
-### 4.2 输入与输出
-
-| 项目   | 内容                |
-| ---- | ----------------- |
-| 目标值  | `SpeedPID.Target` |
-| 实际值  | `AveSpeed`        |
-| 输出   | `SpeedPID.Out`    |
-| 作用对象 | `AnglePID.Target` |
-
----
-
-### 4.3 默认参数
-
-```c
-Kp = 2.2
-Ki = 0.1
-Kd = 0
-OutMax = 20
-OutMin = -20
-```
-
----
-
-## 5. 转向环PID
-
-### 5.1 控制目的
-
-转向环通过控制左右轮差速，实现小车转弯。
-
----
-
-### 5.2 输入与输出
-
-| 项目  | 内容               |
-| --- | ---------------- |
-| 目标值 | `TurnPID.Target` |
-| 实际值 | `DifSpeed`       |
-| 输出  | `DifPWM`         |
-
----
-
-### 5.3 默认参数
-
-```c
-Kp = 5.5
-Ki = 0.07
-Kd = 0
-OutMax = 50
-OutMin = -50
-```
-
----
-
-## 6. PID通用实现
-
-### 6.1 积分限幅
-
-```c
-if (p->ErrorInt > p->ErrorIntMax)
-if (p->ErrorInt < p->ErrorIntMin)
-```
-
-用于抑制积分饱和。
-
----
-
-### 6.2 微分项实现
-
-当前微分项采用测量值变化形式：
-
-```c
--p->Kd * (p->Actual - p->Actual1)
-```
-
-相比误差差分形式，对目标值突变的响应更平滑。
-
----
-
-### 6.3 输出偏置
-
-```c
-if (p->Out > 0) { p->Out += p->OutOffset; }
-if (p->Out < 0) { p->Out -= p->OutOffset; }
-```
-
-用于补偿电机死区，提高小输出时的驱动有效性。
-
----
-
-## 七、FreeRTOS配置说明
-
-## 1. 系统节拍与调度方式
-
-### 1.1 抢占式调度
-
-```c
-#define configUSE_PREEMPTION 1
-```
-
----
-
-### 1.2 系统 Tick
-
-```c
-#define configTICK_RATE_HZ 1000
-```
-
-即：
+### 5.1 角度环
+作用：保持车体俯仰角稳定。
 
 ```text
-1 tick = 1 ms
+目标值：AnglePID.Target
+实际值：Angle
+输出：AnglePID.Out
 ```
 
 ---
 
-### 1.3 最大任务优先级数量
-
-```c
-#define configMAX_PRIORITIES 6
-```
-
-当前使用优先级：
+### 5.2 速度环
+作用：控制前进、后退及停车，同时将输出转化为角度环目标修正。
 
 ```text
-5、3、2、1
+目标值：SpeedPID.Target
+实际值：AveSpeed
+输出：SpeedPID.Out
 ```
 
 ---
 
-## 2. 动态堆配置
-
-### 2.1 堆大小
-
-```c
-#define configTOTAL_HEAP_SIZE ( ( size_t ) ( 10 * 1024 ) )
-```
-
-即：
+### 5.3 转向环
+作用：通过左右轮差速实现转弯控制。
 
 ```text
-10 KB
+目标值：TurnPID.Target
+实际值：DifSpeed
+输出：DifPWM
 ```
 
 ---
 
-### 2.2 堆管理算法
+## 6. BalanceAngleTrim 静态平衡角补偿
 
-工程中使用：
+### 6.1 问题表现
+在无速度输入时，小车仍存在固定方向缓慢滑动；调试发现：
 
 ```text
-FreeRTOS/portable/heap_4.c
+SpeedPID.Out 长期存在单向偏置
 ```
 
-`heap_4` 支持内存块合并，适合一般嵌入式动态内存分配场景。
+说明速度环长期承担了机械静态平衡点偏差补偿。
+
+### 6.2 优化方案
+新增：
+
+```c
+BalanceAngleTrim
+```
+
+并将角度环目标更新为：
+
+```c
+AnglePID.Target = SpeedPID.Out + BalanceAngleTrim;
+```
+
+### 6.3 实际效果
+优化后：
+
+- `SpeedPID.Out` 由长期单向正偏，改善为约 **-2 ~ +2** 范围内双向波动；
+- 小车固定方向慢滑现象减轻；
+- 静态平衡点补偿从速度环中被显式分离。
 
 ---
 
-## 3. 中断优先级配置
+## 7. 外环周期优化
 
-### 3.1 关键宏
-
-```c
-#define configLIBRARY_LOWEST_INTERRUPT_PRIORITY 15
-#define configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY 5
-```
-
-说明：
-
-* 中断优先级数值越小，硬件优先级越高；
-* 能调用 FreeRTOS `FromISR` API 的中断，其优先级数值不能高于 5。
-
----
-
-### 3.2 TIM1中断配置
-
-```c
-NVIC_IRQChannelPreemptionPriority = 5;
-```
-
-因此可调用：
-
-```c
-vTaskNotifyGiveFromISR()
-```
-
----
-
-### 3.3 系统异常映射
-
-```c
-#define vPortSVCHandler     SVC_Handler
-#define xPortPendSVHandler  PendSV_Handler
-#define xPortSysTickHandler SysTick_Handler
-```
-
-用于使 FreeRTOS 接管：
-
-* SVC；
-* PendSV；
-* SysTick。
-
----
-
-## 4. Hook函数
-
-### 4.1 动态内存申请失败 Hook
-
-```c
-void vApplicationMallocFailedHook(void)
-```
-
-若任务、队列等分配失败，将进入死循环。
-
----
-
-### 4.2 栈溢出 Hook
-
-```c
-void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
-```
-
-若任务发生栈溢出，将停止系统继续运行。
-
----
-
-## 八、主程序执行流程
-
-`main.c` 当前执行流程如下：
+### 7.1 原始设置
+速度环与转向环执行周期：
 
 ```text
-main()
-│
-├── OLED_Init()
-├── MPU6050_Init()
-├── BlueSerial_Init()
-├── LED_Init()
-├── Key_Init()
-├── Motor_Init()
-├── Encoder_Init()
-├── Serial_Init()
-├── Timer_Init()
-│
-├── FreeRTOSTasks_Create()
-│   ├── 创建 ControlTask
-│   ├── 创建 KeyLedTask
-│   ├── 创建 DisplayTask
-│   └── 创建 CommTask
-│
-├── vTaskStartScheduler()
-│
-└── while(1)
-    └── 正常情况下不会执行到这里
+50 ms
 ```
 
-调度器启动后的 Key1 启动流程如下：
+### 7.2 优化后设置
+调整为：
 
 ```text
-停止状态
-│
-├── Key1 松手触发
-├── GyroCalibRequest = 1
-├── ControlTask 以 10 ms 周期采集 200 次 GY
-├── 约 2 s 后计算 GyroYBias
-├── 初始化 Angle / Speed / Turn 三个 PID
-├── 清零速度目标、转向目标与差速输出
-└── RunFlag = 1，进入平衡模式
+30 ms
 ```
+
+### 7.3 优化效果
+速度环对低速漂移的修正更及时。  
+根据姿态曲线对比：
+
+| 指标 | 优化前 | 优化后 |
+|---|---:|---:|
+| 外环周期 | 50 ms | 30 ms |
+| 静止 Angle 峰峰值 | 约 2.0° | 约 1.5° |
+| 摆动幅度 | 基准 | 下降约 25% |
 
 ---
 
-## 九、蓝牙通信协议说明
+# 七、按键、通信与可视化调试
 
-### 1. 在线调参命令
+## 1. 稳定计数式按键消抖
+
+### 1.1 原始问题
+机械按键存在抖动，可能导致：
+- 重复触发；
+- 误触发；
+- 启停状态不稳定。
+
+### 1.2 优化方案
+采用非阻塞式稳定计数消抖：
+
+```text
+每 1 ms 采样一次
+连续稳定 20 ms 后确认状态变化
+松手触发按键事件
+```
+
+### 1.3 优化意义
+- 提升按键可靠性；
+- 避免阻塞延时；
+- 更适合 FreeRTOS 周期任务使用。
+
+---
+
+## 2. 蓝牙在线调参与遥控协议
+
+### 2.1 `slider` 在线调参
 
 格式：
 
@@ -1660,16 +576,13 @@ main()
 
 ```text
 [slider,AngleKp,2.4]
-[slider,AngleKi,0.25]
-[slider,AngleKd,6]
-[slider,SpeedKp,2.2]
-[slider,TurnKi,0.07]
+[slider,SpeedKi,0.10]
 [slider,Offset,3]
 ```
 
 ---
 
-### 2. 遥控命令
+### 2.2 `joystick` 遥控
 
 格式：
 
@@ -1677,152 +590,135 @@ main()
 [joystick,LH,LV,RH,RV]
 ```
 
-示例：
+当前使用：
 
 ```text
-[joystick,0,50,25,0]
-```
-
-当前解释为：
-
-```text
-LV -> 小车前后速度目标
-RH -> 小车左右转向目标
+LV -> SpeedPID.Target
+RH -> TurnPID.Target
 ```
 
 ---
 
-### 3. 预留按键命令
+## 3. OLED 实时显示
 
-格式：
+OLED 显示用于：
 
-```text
-[key,Name,Action]
+- 实时观察姿态角；
+- 查看 GY 补偿后数据；
+- 观察 PID 参数变化；
+- 观察速度反馈与控制输出；
+- 判断标定、运行与停止状态。
+
+---
+
+## 4. 串口调试注意事项
+
+调试阶段发现，高频调用：
+
+```c
+BlueSerial_Printf("[plot,...]");
 ```
 
-当前已完成解析框架，但未绑定具体业务逻辑。
+会占用串口发送带宽，并影响蓝牙滑杆在线调参。
+
+因此在控制类项目中应避免：
+- 在高优先级控制任务中进行高频阻塞打印；
+- 在低波特率串口上持续输出大数据包。
+
+更合理的方式是：
+- 降低打印频率；
+- 使用独立 DebugTask；
+- 或采用更高波特率/缓冲发送策略。
 
 ---
 
-## 十、关键文件功能速查表
+# 八、硬件模块与工程文件对应关系
 
-| 文件                        | 功能                        |
-| ------------------------- | ------------------------- |
-| `User/main.c`             | 系统初始化、任务创建、调度器启动、TIM1中断回调 |
-| `User/FreeRTOSTasks.c`    | 四个核心任务实现，并包含启动前 GY 零偏标定状态机 |
-| `User/FreeRTOSTasks.h`    | 任务创建函数与控制任务句柄声明           |
-| `User/AppData.c/h`        | 全局共享变量、三环 PID 实例、GY 零偏与标定状态变量 |
-| `User/PID.c/h`            | 通用 PID 算法                 |
-| `User/FreeRTOSConfig.h`   | FreeRTOS 核心配置             |
-| `User/FreeRTOSHooks.c`    | 内存失败与栈溢出 Hook             |
-| `System/Timer.c/h`        | TIM1 10 ms 定时中断           |
-| `Hardware/MPU6050.c/h`    | 姿态传感器底层驱动与原始六轴数据读取         |
-| `Hardware/MyI2C.c/h`      | 软件 I2C                    |
-| `Hardware/Motor.c/h`      | 电机方向控制                    |
-| `Hardware/PWM.c/h`        | PWM 输出                    |
-| `Hardware/Encoder.c/h`    | 编码器测速                     |
-| `Hardware/OLED.c/h`       | OLED 显示驱动                 |
-| `Hardware/OLED_Data.c/h`  | OLED 字库与图形数据              |
-| `Hardware/Key.c/h`        | 按键输入与消抖                   |
-| `Hardware/LED.c/h`        | LED 状态指示                  |
-| `Hardware/Serial.c/h`     | 普通串口调试                    |
-| `Hardware/BlueSerial.c/h` | 蓝牙串口接收与发送                 |
+| 模块 | 主要作用 | 对应文件 |
+|---|---|---|
+| MPU6050 | 姿态采集 | `Hardware/MPU6050.c/h` |
+| 软件 I2C | MPU6050 通信 | `Hardware/MyI2C.c/h` |
+| 电机方向控制 | 电机正反转 | `Hardware/Motor.c/h` |
+| PWM | 电机占空比输出 | `Hardware/PWM.c/h` |
+| 编码器 | 轮速采集 | `Hardware/Encoder.c/h` |
+| 按键 | 启停控制与消抖 | `Hardware/Key.c/h` |
+| LED | 状态指示 | `Hardware/LED.c/h` |
+| OLED | 数据显示 | `Hardware/OLED.c/h` |
+| 蓝牙串口 | 在线调参与遥控 | `Hardware/BlueSerial.c/h` |
+| 普通串口 | 调试输出 | `Hardware/Serial.c/h` |
+| TIM1 定时器 | 控制任务周期触发 | `System/Timer.c/h` |
+| PID 算法 | 三环控制实现 | `User/PID.c/h` |
+| 全局数据 | 状态量与 PID 实例 | `User/AppData.c/h` |
+| RTOS 任务 | 任务创建与任务函数 | `User/FreeRTOSTasks.c/h` |
+| 主程序 | 系统初始化与调度器启动 | `User/main.c` |
 
 ---
 
-## 十一、当前工程特点与阶段性改造结果
+# 九、关键优化与效果总结
 
-### 1. 已完成的 FreeRTOS 化改造
-
-当前工程已经完成以下重构：
-
-| 原裸机结构       | 当前 FreeRTOS 结构   |
-| ----------- | ---------------- |
-| 主循环处理 OLED  | `DisplayTask`    |
-| 主循环处理蓝牙解析   | `CommTask`       |
-| 主循环处理按键与LED | `KeyLedTask`     |
-| 中断内直接控制算法   | `ControlTask` 执行 |
-| 定时器仅用于中断运算  | 定时器触发任务通知        |
-| 固定写死 GY 零偏  | 按键启动前 2 s 静止标定 `GyroYBias` |
-
----
-
-### 2. 当前控制周期
-
-| 功能         |     周期 |
-| ---------- | -----: |
-| TIM1 控制触发  |  10 ms |
-| 姿态解算 + 角度环 |  10 ms |
-| 速度环 + 转向环  |  50 ms |
-| 按键扫描       |   1 ms |
-| 蓝牙解析       |   5 ms |
-| OLED 刷新    | 100 ms |
-| 启动前 GY 零偏标定 | 2 s（200 × 10 ms） |
+| 问题 | 优化措施 | 效果 |
+|---|---|---|
+| 按键机械抖动、误触发 | 稳定计数式按键消抖 | 1 ms 采样、20 ms 稳定确认，触发更可靠 |
+| 固定 GY 零偏不适应不同启动状态 | 按键启动前 2 s、200 次静止采样标定 | 姿态积分零偏补偿更稳定 |
+| 静止状态下 GY 波动较大 | `SMPLRT_DIV=0x09`、`CONFIG=0x02` | GY 波动明显下降 |
+| 无速度输入时小车固定方向慢滑 | `BalanceAngleTrim` 静态平衡角补偿 | `SpeedPID.Out` 由长期单向正偏改善为约 `-2 ~ +2` 波动 |
+| 外环修正不够及时 | 速度环/转向环周期 50 ms → 30 ms | `Angle` 峰峰值约 2.0° → 1.5°，摆动幅度下降约 25% |
+| 裸机逻辑耦合高 | FreeRTOS 多任务重构 | 控制、显示、按键、通信解耦 |
+| 中断中控制逻辑过重 | TIM1 中断仅通知 ControlTask | 中断更轻量，结构更清晰 |
+| TIM1 优先级配置异常 | 调整 NVIC 中断优先级 | 系统显示与任务运行恢复正常 |
+| OLED 浮点数据显示异常 | 修正格式化输出类型 | 显示结果准确 |
+| 启动与运行姿态基准不一致 | 统一 `AngleAcc += 2.5f` | 姿态基准一致 |
+| 高频蓝牙打印影响调参 | 控制打印频率，避免关键任务高频阻塞输出 | 在线调参与通信稳定性恢复 |
 
 ---
 
-### 3. 当前工程的设计优势
+# 十、关键文件功能速查表
 
-1. **实时控制逻辑更清晰**
-   控制算法从中断剥离，改由高优先级任务执行。
+| 文件 | 功能 |
+|---|---|
+| `User/main.c` | 初始化外设、创建任务、启动调度器 |
+| `User/FreeRTOSTasks.c` | 四个核心任务的实现 |
+| `User/FreeRTOSTasks.h` | 任务创建函数与控制任务句柄声明 |
+| `User/AppData.c/h` | 全局状态量、控制变量、PID 实例 |
+| `User/PID.c/h` | 通用 PID 计算 |
+| `User/FreeRTOSConfig.h` | FreeRTOS 核心配置 |
+| `User/FreeRTOSHooks.c` | 内存失败与栈溢出 Hook |
+| `System/Timer.c/h` | TIM1 10 ms 控制触发 |
+| `Hardware/MPU6050.c/h` | 姿态传感器驱动 |
+| `Hardware/MyI2C.c/h` | 软件 I2C |
+| `Hardware/Motor.c/h` | 电机方向控制 |
+| `Hardware/PWM.c/h` | PWM 输出 |
+| `Hardware/Encoder.c/h` | 编码器测速 |
+| `Hardware/Key.c/h` | 按键输入与消抖 |
+| `Hardware/LED.c/h` | LED 状态指示 |
+| `Hardware/OLED.c/h` | OLED 显示 |
+| `Hardware/BlueSerial.c/h` | 蓝牙串口接收与发送 |
+| `Hardware/Serial.c/h` | 普通串口调试 |
 
-2. **模块职责更明确**
-   控制、通信、显示、交互彼此解耦。
+---
 
-3. **便于后续扩展**
-   可继续加入：
+# 十一、当前工程特点
 
-   * 控制状态机；
-   * 故障报警；
-   * 串口日志任务；
-   * 队列通信；
-   * 蓝牙任务通知替代轮询；
-   * 运行数据记录。
+当前项目已完成从“基础裸机平衡车”到“具备较完整工程结构与可调试能力的 RTOS 控制系统”的升级，具有以下特点：
 
-4. **符合 RTOS 设计原则**
-   中断短小、任务分层、优先级明确。
-
-5. **启动前姿态基准更可靠**
-   每次进入平衡模式前重新估计 `GyroYBias`，降低固定 GY 偏置对姿态积分的影响。
+1. 硬件驱动模块完整；
+2. 控制算法链路清晰；
+3. 使用 FreeRTOS 进行任务化重构；
+4. 采用中断通知驱动高优先级控制任务；
+5. 启动流程更稳定；
+6. 姿态信号处理更合理；
+7. 静止平衡性能得到定量改善；
+8. 具备在线调参与可视化调试能力；
+9. 项目结构适合继续扩展。
 
 ---
 
-### 4. 当前仍可进一步优化的方向
+# 十二、后续可继续优化方向
 
-1. `CommTask` 目前仍采用轮询 `BlueSerial_RxFlag`，后续可改为：
-
-   * 二值信号量；
-   * 任务通知；
-   * 消息队列。
-
-2. `Serial.c` 当前主要用于调试，若正式版本不需要串口日志，可选择：
-
-   * 保留作调试口；
-   * 或在发布版中裁剪。
-
-3. 可将共享变量访问进一步规范化，必要时使用：
-
-   * 临界区；
-   * 互斥量；
-   * 任务间消息机制。
-
-4. 可增加系统诊断显示：
-
-   * 剩余堆；
-   * 最小剩余堆；
-   * 控制节拍积压标志；
-   * 任务栈高水位。
-
-5. 可继续提升任务设计完整性：
-
-   * 使用 `vTaskDelayUntil()` 构建周期任务；
-   * 增加错误处理任务；
-   * 将参数配置单独抽象为配置管理模块。
-
-6. 可继续完善启动前标定体验：
-
-   * 标定期间增加更明确的 LED/OLED 状态提示；
-   * 增加标定取消或重新触发机制；
-   * 根据后续测试决定是否保留 2 s 标定时长，或将其参数化。
-
----
+1. 增加遥控命令超时保护，防止蓝牙目标值长时间残留；
+2. 将蓝牙接收由轮询标志位优化为任务通知或消息缓冲；
+3. 独立建立 DebugTask，统一管理低频调试输出；
+4. 继续细调 `BalanceAngleTrim` 与速度环参数，进一步减小静止慢漂；
+5. 对 `Angle`、`GYCorrected`、`AveSpeed` 建立标准化测试表；
+6. 增加任务栈余量、堆余量和控制节拍诊断；
+7. 后续可引入看门狗，提高系统异常复位能力。
