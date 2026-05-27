@@ -32,13 +32,13 @@ void BlueSerial_Init(void)
 	
 	USART_ITConfig(USART2, USART_IT_RXNE, ENABLE);
 	
-	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
+	//NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
 	
 	NVIC_InitTypeDef NVIC_InitStructure;
 	NVIC_InitStructure.NVIC_IRQChannel = USART2_IRQn;
 	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 6;
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
 	NVIC_Init(&NVIC_InitStructure);
 	
 	USART_Cmd(USART2, ENABLE);

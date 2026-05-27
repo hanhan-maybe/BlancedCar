@@ -17,7 +17,7 @@ void Timer_Init(void)
 	TIM_ClearFlag(TIM1, TIM_FLAG_Update);
 	TIM_ITConfig(TIM1, TIM_IT_Update, ENABLE);
 	
-	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
+	//NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
 	
 	NVIC_InitTypeDef NVIC_InitStructure;
 	NVIC_InitStructure.NVIC_IRQChannel = TIM1_UP_IRQn;

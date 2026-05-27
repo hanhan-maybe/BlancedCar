@@ -22,6 +22,7 @@
 
 int main(void)
 {
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
     OLED_Init();
     MPU6050_Init();
 	
