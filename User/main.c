@@ -14,6 +14,7 @@
 #include "task.h"
 #include "FreeRTOSTasks.h"
 #include "AppData.h"
+#include "ParamStore.h"
 
 #include <math.h>
 #include <string.h>
@@ -22,10 +23,15 @@
 
 int main(void)
 {
+    /* =====================================================
+     * FreeRTOS 工程中 NVIC 优先级分组只配置一次。
+     * 必须放在所有外设 NVIC_Init() 之前。
+     * ===================================================== */
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
+
     OLED_Init();
     MPU6050_Init();
-	
+
     BlueSerial_Init();
     LED_Init();
     Key_Init();
@@ -33,29 +39,19 @@ int main(void)
     Encoder_Init();
     Serial_Init();
 
-    /*
-     * 当前阶段仍保留 Timer_Init。
-     * 原 TIM1 中断里的控制逻辑暂时不动。
-     */
     Timer_Init();
 
-    /*
-     * 创建 FreeRTOS 应用任务：
-     * - 按键/LED任务
-     * - OLED显示任务
-     * - 蓝牙解析任务
-     */
+    /* =====================================================
+     * 启动时尝试加载 Flash 保存参数。
+     * 如果 Flash 中没有有效参数，函数返回 0，
+     * 系统继续使用 AppData.c 中的默认参数。
+     * ===================================================== */
+    ParamStore_Load();
+
     FreeRTOSTasks_Create();
 
-    /*
-     * 启动调度器
-     */
     vTaskStartScheduler();
 
-    /*
-     * 正常情况下不会执行到这里。
-     * 若进入，通常表示 FreeRTOS 堆不足，调度器启动失败。
-     */
     while (1)
     {
     }

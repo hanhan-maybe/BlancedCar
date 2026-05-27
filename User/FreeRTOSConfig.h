@@ -1,5 +1,7 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
+/* 允许调用 uxTaskGetStackHighWaterMark() 查询任务栈高水位 */
+#define INCLUDE_uxTaskGetStackHighWaterMark    1
 
 #include "stm32f10x.h"
 #include <stdint.h>

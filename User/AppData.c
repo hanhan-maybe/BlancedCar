@@ -1,5 +1,6 @@
 #include "AppData.h"
 
+
 /* MPU6050 原始数据 */
 int16_t AX, AY, AZ, GX, GY, GZ;
 
@@ -30,6 +31,34 @@ volatile uint8_t GyroCalibDone = 0;
 /* 按键与运行状态 */
 uint8_t KeyNum;
 volatile uint8_t RunFlag;
+
+/* =========================================================
+ * 系统状态机
+ * 初始状态为 STOP，等待按键启动标定。
+ * ========================================================= */
+volatile SystemState_t SystemState = SYS_STOP;
+volatile FaultCode_t FaultCode = FAULT_NONE;
+
+/* =========================================================
+ * 控制周期实时性诊断
+ * ControlOverrunCount：累计出现控制任务积压的次数
+ * ControlMaxNotifyCount：记录最大一次积压了多少个 TIM1 通知
+ * ========================================================= */
+volatile uint32_t ControlOverrunCount = 0;
+volatile uint32_t ControlMaxNotifyCount = 0;
+
+/* =========================================================
+ * 目标命令变量
+ * joystick 输入先写入这里，避免直接突变 PID.Target。
+ * ========================================================= */
+float SpeedTargetCmd = 0.0f;
+float TurnTargetCmd = 0.0f;
+
+/* =========================================================
+ * OLED 页码变量
+ * K2 按键切换 0 / 1 两页。
+ * ========================================================= */
+volatile uint8_t DisplayPage = 0;
 
 /* 电机输出相关 */
 int16_t LeftPWM, RightPWM;

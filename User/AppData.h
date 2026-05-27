@@ -4,6 +4,29 @@
 #include "stm32f10x.h"
 #include "PID.h"
 
+/* =========================================================
+ * 系统状态机定义
+ * ========================================================= */
+
+/* 系统运行状态 */
+typedef enum
+{
+    SYS_STOP = 0,      // 停止状态，电机关闭，等待启动
+    SYS_CALIB,         // 启动前陀螺仪零偏标定状态
+    SYS_RUN,           // 正常平衡运行状态
+    SYS_FAULT          // 故障保护状态，禁止电机输出
+} SystemState_t;
+
+/* 故障码定义 */
+typedef enum
+{
+    FAULT_NONE = 0,        // 无故障
+    FAULT_ANGLE_OVER,      // 倾角越界故障
+    FAULT_CONTROL_OVERRUN, // 控制任务周期超时故障
+    FAULT_MPU_ERROR        // MPU6050 数据异常，当前预留
+} FaultCode_t;
+
+
 /* MPU6050 原始数据 */
 extern int16_t AX, AY, AZ, GX, GY, GZ;
 
@@ -45,5 +68,32 @@ extern float BalanceAngleTrim;
 extern PID_t AnglePID;
 extern PID_t SpeedPID;
 extern PID_t TurnPID;
+
+/* =========================================================
+ * 系统状态与故障码
+ * ========================================================= */
+extern volatile SystemState_t SystemState;
+extern volatile FaultCode_t FaultCode;
+
+/* =========================================================
+ * FreeRTOS 控制周期诊断变量
+ * ========================================================= */
+extern volatile uint32_t ControlOverrunCount;     // 控制任务超时累计次数
+extern volatile uint32_t ControlMaxNotifyCount;   // 单次最大通知积压数
+
+/* =========================================================
+ * 速度/转向命令目标
+ * 蓝牙 joystick 只修改这两个变量；
+ * ControlTask 中再通过 Ramp_Update 平滑更新 PID.Target。
+ * ========================================================= */
+extern float SpeedTargetCmd;
+extern float TurnTargetCmd;
+
+/* =========================================================
+ * OLED 显示页
+ * 0：运行状态页
+ * 1：系统诊断页
+ * ========================================================= */
+extern volatile uint8_t DisplayPage;
 
 #endif

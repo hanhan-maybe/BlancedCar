@@ -99,6 +99,8 @@ virtualFolder:
         - path: Hardware/Serial.h
         - path: Hardware/BlueSerial.c
         - path: Hardware/BlueSerial.h
+        - path: Hardware/ParamStore.c
+        - path: Hardware/ParamStore.h
       folders: []
     - name: User
       files:
