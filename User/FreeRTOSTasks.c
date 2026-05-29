@@ -10,6 +10,7 @@
 #include "Motor.h"
 #include "Encoder.h"
 #include "ParamStore.h"
+#include "Serial.h"
 
 #include <math.h>
 #include <string.h>
@@ -57,6 +58,24 @@ TaskHandle_t ControlTaskHandle = NULL;
 static TaskHandle_t KeyLedTaskHandle = NULL;
 static TaskHandle_t DisplayTaskHandle = NULL;
 static TaskHandle_t CommTaskHandle = NULL;
+static TaskHandle_t SerialTestTaskHandle = NULL;
+static TaskHandle_t CPUStatTaskHandle = NULL;
+
+/*-----------------------------------------------------------
+ * CPU 占用率统计变量
+ *
+ * 原理：
+ * 通过 FreeRTOS Idle Hook 统计 1 s 内空闲任务运行次数。
+ * 空闲计数越高，CPU 越空闲；
+ * 空闲计数越低，CPU 越忙。
+ *----------------------------------------------------------*/
+
+volatile uint32_t IdleCounter = 0;
+volatile uint32_t IdleCounterPerSec = 0;
+volatile uint32_t IdleCounterBase = 1;
+
+volatile float CPU_UsageExtra = 0.0f;
+volatile uint8_t CPU_BaseReady = 0;
 
 /*-----------------------------------------------------------
  * 任务函数声明
@@ -65,7 +84,24 @@ static void AppTask_Control(void *pvParameters);
 static void AppTask_KeyLed(void *pvParameters);
 static void AppTask_Display(void *pvParameters);
 static void AppTask_Comm(void *pvParameters);
+static void AppTask_SerialTest(void *pvParameters);
+static void AppTask_CPUStat(void *pvParameters);
 
+
+/*-----------------------------------------------------------
+ * FreeRTOS 空闲任务钩子函数
+ *
+ * 使用前需要在 FreeRTOSConfig.h 中打开：
+ * #define configUSE_IDLE_HOOK 1
+ *
+ * 注意：
+ * 这里不能写阻塞函数，不能写 vTaskDelay()，
+ * 不能写 OLED/串口打印。
+ *----------------------------------------------------------*/
+void vApplicationIdleHook(void)
+{
+    IdleCounter++;
+}
 
 /* =========================================================
  * 目标斜坡函数
@@ -211,15 +247,15 @@ void FreeRTOSTasks_Create(void)
         &ControlTaskHandle
     );
 
-   configASSERT(ret == pdPASS);
+    configASSERT(ret == pdPASS);
 
-   ret = xTaskCreate(
-        AppTask_KeyLed,      // 1. 任务函数名 (这个任务具体要去执行哪个函数)
-        "KeyLed",            // 2. 任务的文本名字 (纯粹为了调试好看，没实际作用)
-        256,                 // 3. 分配给这个任务的堆栈大小 (256个字，即 1024 字节)
-        NULL,                // 4. 传递给任务函数的参数 (这里没传参数，写 NULL)
-        3,                   // 5. 任务优先级！(数字越大，优先级越高)
-        &KeyLedTaskHandle    // 6. 任务句柄 (相当于这个任务的“身份证号”，后续操作它要用到)
+    ret = xTaskCreate(
+        AppTask_KeyLed,
+        "KeyLed",
+        256,
+        NULL,
+        3,
+        &KeyLedTaskHandle
     );
 
     configASSERT(ret == pdPASS);
@@ -245,8 +281,130 @@ void FreeRTOSTasks_Create(void)
     );
 
     configASSERT(ret == pdPASS);
+
+    /* CPU 占用率统计任务：RXNE 和 DMA 两种模式都需要 */
+    ret = xTaskCreate(
+        AppTask_CPUStat,
+        "CPUStat",
+        128,
+        NULL,
+        1,
+        &CPUStatTaskHandle
+    );
+
+    configASSERT(ret == pdPASS);
+
+#if SERIAL_RX_USE_DMA
+    /*
+     * USART1 DMA 接收轮询任务：
+     * 只在 SERIAL_RX_USE_DMA = 1 时创建。
+     * RXNE 中断模式不创建该任务，避免影响 CPU 对比。
+     */
+    ret = xTaskCreate(
+        AppTask_SerialTest,
+        "SerialTest",
+        128,
+        NULL,
+        1,
+        &SerialTestTaskHandle
+    );
+
+    configASSERT(ret == pdPASS);
+#endif
 }
 
+/*测试CPU占用*/
+/*-----------------------------------------------------------
+ * USART1 DMA 接收轮询任务
+ *
+ * 仅在 SERIAL_RX_USE_DMA = 1 时创建。
+ * 每 5 ms 读取一次 DMA1_Channel5 环形缓冲区中新收到的数据。
+ *----------------------------------------------------------*/
+static void AppTask_SerialTest(void *pvParameters)
+{
+    (void)pvParameters;
+
+    while (1)
+    {
+        Serial_PollDMA();
+
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+}
+
+/*-----------------------------------------------------------
+ * CPU 占用率统计任务
+ *
+ * 启动后前 5 秒不要运行 Python 发送脚本，
+ * 程序会自动采集无串口输入时的 CPU 基线。
+ *
+ * CPU_Usage:
+ * 当前系统总 CPU 占用率
+ *
+ * CPU_UsageBase:
+ * 前 5 秒无串口输入时的基线 CPU 占用率
+ *
+ * CPU_UsageExtra:
+ * 当前 CPU 占用率 - 基线 CPU 占用率
+ * 用于评估 USART1 接收带来的额外 CPU 开销
+ *----------------------------------------------------------*/
+static void AppTask_CPUStat(void *pvParameters)
+{
+    (void)pvParameters;
+
+    uint32_t CurrentIdle;
+    uint8_t BaseSampleCount = 0;
+    uint64_t BaseSum = 0;
+
+    while (1)
+    {
+        taskENTER_CRITICAL();
+        IdleCounter = 0;
+        taskEXIT_CRITICAL();
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        taskENTER_CRITICAL();
+        CurrentIdle = IdleCounter;
+        taskEXIT_CRITICAL();
+
+        IdleCounterPerSec = CurrentIdle;
+
+        /*
+         * 启动后前 5 秒不要运行 Python。
+         * 这 5 秒用于采集无串口输入时的 Idle 基线。
+         */
+        if (BaseSampleCount < 5)
+        {
+            BaseSum += CurrentIdle;
+            BaseSampleCount++;
+
+            if (BaseSampleCount == 5)
+            {
+                IdleCounterBase = (uint32_t)(BaseSum / 5);
+                CPU_BaseReady = 1;
+            }
+
+            CPU_UsageExtra = 0.0f;
+        }
+        else
+        {
+            if (IdleCounterBase > 0)
+            {
+                if (CurrentIdle < IdleCounterBase)
+                {
+                    CPU_UsageExtra =
+                        100.0f * ((float)(IdleCounterBase - CurrentIdle) /
+                                  (float)IdleCounterBase);
+                }
+                else
+                {
+                    CPU_UsageExtra = 0.0f;
+                }
+            }
+        }
+    }
+}
 
 static void AppTask_Control(void *pvParameters)
 {
@@ -634,6 +792,14 @@ static void AppTask_KeyLed(void *pvParameters)
             * ===================================================== */
             DisplayPage = 1;
         }
+        else if (KeyNum == 3)
+        {
+            /* =====================================================
+            * K3 切换 OLED 页面
+            * 只在 Page 0、Page 1 和 Page 2 之间切换。
+            * ===================================================== */
+            DisplayPage = 2;
+        }
         /* =========================================================
         * LED 状态指示
         * 当前简化设计：只有 SYS_RUN 时点亮。
@@ -707,7 +873,7 @@ static void AppTask_KeyLed(void *pvParameters)
             OLED_Printf(0, 56, OLED_6X8, "GY:%+05.0f",
                         GYCorrected);
         }
-        else
+        else if(DisplayPage == 1)
         {
             /* =================================================
              * Page 1：系统诊断页
@@ -744,7 +910,41 @@ static void AppTask_KeyLed(void *pvParameters)
                         ControlMaxNotifyCount);
             
             // OLED_Printf(0, 56, OLED_6X8, "TErr:%d",TimerErrorFlag);
-            OLED_Printf(0, 56, OLED_6X8, "P:S%d L%d V%d",ParamSaveStatus,ParamLoadStatus,ParamVerifyStatus);
+            OLED_Printf(0, 56, OLED_6X8, "BT:%lu P:%lu D:%lu",
+            BlueSerial_RxByteCount,
+            BlueSerial_RxPacketCount,
+            BlueSerial_RxDropCount);
+            //OLED_Printf(0, 56, OLED_6X8, "P:S%d L%d V%d",ParamSaveStatus,ParamLoadStatus,ParamVerifyStatus);
+
+        }
+        else if (DisplayPage == 2)
+        {
+            #if SERIAL_RX_USE_DMA
+            OLED_Printf(0, 0, OLED_6X8, "USART1 DMA");
+            #else
+            OLED_Printf(0, 0, OLED_6X8, "USART1 IRQ");
+            #endif
+
+            OLED_Printf(0, 8, OLED_6X8, "EX:%05.1f%%", CPU_UsageExtra);
+
+            OLED_Printf(0, 16, OLED_6X8, "Idle:%lu",
+                        IdleCounterPerSec);
+
+            OLED_Printf(0, 24, OLED_6X8, "Base:%lu",
+                        IdleCounterBase);
+
+            OLED_Printf(0, 32, OLED_6X8, "BT:%lu",
+                        Serial_RxByteCount);
+
+            OLED_Printf(0, 40, OLED_6X8, "IRQ:%lu",
+                        Serial_RxIrqCount);
+
+            OLED_Printf(0, 48, OLED_6X8, "DP:%lu",
+                        Serial_DmaPollCount);
+
+            OLED_Printf(0, 56, OLED_6X8, "W:%u L:%u",
+                        Serial_DmaWritePos,
+                        Serial_DmaLastPos);
         }
 
         OLED_Update();
@@ -753,20 +953,35 @@ static void AppTask_KeyLed(void *pvParameters)
          * 蓝牙 plot 限频发送
          * 原来每 100 ms 发送一次，现在改为每 500 ms 发送一次，
          * 降低阻塞式串口发送对系统实时性的影响。
+         * 便于测试临界保护区是否有效
          * ===================================================== */
         PlotCount++;
 
         if (PlotCount >= 5)
         {
+            float Plot_AngleKp;
+            float Plot_SpeedTargetCmd;
+            float Plot_TurnTargetCmd;
+           
+
             PlotCount = 0;
 
-            BlueSerial_Printf("[plot,%.2f,%.2f,%.2f,%.2f]",
-                              AnglePID.Target,
-                              SpeedPID.Out,
-                              AveSpeed,
-                              SpeedPID.Target);
-        }
+            taskENTER_CRITICAL();
+            Plot_AngleKp = AnglePID.Kp;
+            Plot_SpeedTargetCmd = SpeedTargetCmd;
+            Plot_TurnTargetCmd = TurnTargetCmd;
 
+            taskEXIT_CRITICAL();
+
+            /*便于测试临界保护区是否有效*/
+            //小程序发送[slider,AngleKp,1.55]，接收到 [plot,1.55,0.00,0.00] 即表示 AnglePID.Kp 成功被安全地读取并发送了。
+            //小程序发送[joystick,0,25,0,0]，接收到 [plot,0.00,1.00,0.00] 即表示 SpeedTargetCmd 成功被安全地读取并发送了。
+            //也可以滑动滑杆或者摇杆，接收区出现相应数值变化即表示数据成功读取和发送了。
+            BlueSerial_Printf("[plot,%.2f,%.2f,%.2f]",
+                            Plot_AngleKp,
+                            Plot_SpeedTargetCmd,
+                            Plot_TurnTargetCmd);
+        }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -775,141 +990,91 @@ static void AppTask_KeyLed(void *pvParameters)
  * 蓝牙通信解析任务
  *
  *----------------------------------------------------------*/
-static void AppTask_Comm(void *pvParameters)
+void AppTask_Comm(void *argument)
 {
-    (void)pvParameters;
+    char RxPacketLocal[BLUESERIAL_PACKET_SIZE];
 
-    for (;;)
+    while (1)
     {
-        if (BlueSerial_RxFlag == 1)
+        BlueSerial_PollDMA();
+
+        if (BlueSerial_GetRxPacket(RxPacketLocal, sizeof(RxPacketLocal)) == 1)
         {
-            char *Tag = strtok(BlueSerial_RxPacket, ",");
+            char *Tag = strtok(RxPacketLocal, ",");
 
-            if (Tag == NULL)
+            if (Tag != NULL)
             {
-                /* 数据异常，直接丢弃 */
-            }
-            else if (strcmp(Tag, "key") == 0)
-            {
-                char *Name = strtok(NULL, ",");
-                char *Action = strtok(NULL, ",");
-
-                (void)Name;
-                (void)Action;
-
-                /* 当前项目仍保持预留，不做动作 */
-            }
-            else if (strcmp(Tag, "slider") == 0)
-            {
-                char *Name = strtok(NULL, ",");
-                char *Value = strtok(NULL, ",");
-
-                if (Name != NULL && Value != NULL)
+                if (strcmp(Tag, "slider") == 0)
                 {
-                    if (strcmp(Name, "AngleKp") == 0)
+                    char *Name = strtok(NULL, ",");
+                    char *ValueStr = strtok(NULL, ",");
+
+                    if (Name != NULL && ValueStr != NULL)
                     {
-                        AnglePID.Kp = atof(Value);
+                        float Value = atof(ValueStr);
+
+                        if (strcmp(Name, "AngleKp") == 0)
+                        {
+                            AnglePID.Kp = Value;
+                        }
+                        else if (strcmp(Name, "AngleKi") == 0)
+                        {
+                            AnglePID.Ki = Value;
+                        }
+                        else if (strcmp(Name, "AngleKd") == 0)
+                        {
+                            AnglePID.Kd = Value;
+                        }
+                        else if (strcmp(Name, "SpeedKp") == 0)
+                        {
+                            SpeedPID.Kp = Value;
+                        }
+                        else if (strcmp(Name, "SpeedKi") == 0)
+                        {
+                            SpeedPID.Ki = Value;
+                        }
+                        else if (strcmp(Name, "SpeedKd") == 0)
+                        {
+                            SpeedPID.Kd = Value;
+                        }
+                        else if (strcmp(Name, "TurnKp") == 0)
+                        {
+                            TurnPID.Kp = Value;
+                        }
+                        else if (strcmp(Name, "TurnKi") == 0)
+                        {
+                            TurnPID.Ki = Value;
+                        }
+                        else if (strcmp(Name, "TurnKd") == 0)
+                        {
+                            TurnPID.Kd = Value;
+                        }
                     }
-                    else if (strcmp(Name, "AngleKi") == 0)
+                }
+                else if (strcmp(Tag, "joystick") == 0)
+                {
+                    char *LH_Str = strtok(NULL, ",");
+                    char *LV_Str = strtok(NULL, ",");
+                    char *RH_Str = strtok(NULL, ",");
+                    char *RV_Str = strtok(NULL, ",");
+
+                    if (LH_Str != NULL && LV_Str != NULL && RH_Str != NULL && RV_Str != NULL)
                     {
-                        AnglePID.Ki = atof(Value);
-                    }
-                    else if (strcmp(Name, "AngleKd") == 0)
-                    {
-                        AnglePID.Kd = atof(Value);
-                    }
-                    else if (strcmp(Name, "SpeedKp") == 0)
-                    {
-                        SpeedPID.Kp = atof(Value);
-                    }
-                    else if (strcmp(Name, "SpeedKi") == 0)
-                    {
-                        SpeedPID.Ki = atof(Value);
-                    }
-                    else if (strcmp(Name, "SpeedKd") == 0)
-                    {
-                        SpeedPID.Kd = atof(Value);
-                    }
-                    else if (strcmp(Name, "TurnKp") == 0)
-                    {
-                        TurnPID.Kp = atof(Value);
-                    }
-                    else if (strcmp(Name, "TurnKi") == 0)
-                    {
-                        TurnPID.Ki = atof(Value);
-                    }
-                    else if (strcmp(Name, "TurnKd") == 0)
-                    {
-                        TurnPID.Kd = atof(Value);
-                    }
-                    else if (strcmp(Name, "Offset") == 0)
-                    {
-                        AnglePID.OutOffset = atof(Value);
+                        int LH = atoi(LH_Str);
+                        int LV = atoi(LV_Str);
+                        int RH = atoi(RH_Str);
+                        int RV = atoi(RV_Str);
+
+                        taskENTER_CRITICAL();
+                        SpeedTargetCmd = LV / 25.0f;
+                        TurnTargetCmd = RH / 25.0f;
+                        taskEXIT_CRITICAL();
+
+                        (void)LH;
+                        (void)RV;
                     }
                 }
             }
-            else if (strcmp(Tag, "joystick") == 0)
-            {
-                char *LHStr = strtok(NULL, ",");
-                char *LVStr = strtok(NULL, ",");
-                char *RHStr = strtok(NULL, ",");
-                char *RVStr = strtok(NULL, ",");
-
-                if (LHStr != NULL &&
-                    LVStr != NULL &&
-                    RHStr != NULL &&
-                    RVStr != NULL)
-                {
-                    int8_t LH = atoi(LHStr);
-                    int8_t LV = atoi(LVStr);
-                    int8_t RH = atoi(RHStr);
-                    int8_t RV = atoi(RVStr);
-
-                    (void)LH;
-                    (void)RV;
-
-                    /* =========================================================
-                    * joystick 命令不再直接写 PID.Target。
-                    * 先写入命令目标，再由 ControlTask 做目标斜坡。
-                    * ========================================================= */
-                    SpeedTargetCmd = LV / 25.0f;
-                    TurnTargetCmd = RH / 25.0f;
-                }
-            }
-
-            /*增加 Flash 参数保存命令*/
-            else if (strcmp(Tag, "save") == 0)
-            {
-                char *Name = strtok(NULL, ",");
-
-                if (Name != NULL && strcmp(Name, "param") == 0)
-                {
-                    /* 保存当前 PID 参数和平衡角补偿到片内 Flash */
-                    ParamStore_Save();
-                }
-            }
-            else if (strcmp(Tag, "load") == 0)
-            {
-                char *Name = strtok(NULL, ",");
-
-                if (Name != NULL && strcmp(Name, "param") == 0)
-                {
-                    /* 从片内 Flash 读取已保存参数 */
-                    ParamStore_Load();
-                }
-            }
-            else if (strcmp(Tag, "reset") == 0)
-            {
-                char *Name = strtok(NULL, ",");
-
-                if (Name != NULL && strcmp(Name, "param") == 0)
-                {
-                    /* 仅恢复 RAM 中的默认参数，不擦除 Flash */
-                    ParamStore_ResetToDefault();
-                }
-            }
-
-            BlueSerial_RxFlag = 0;
         }
 
         vTaskDelay(pdMS_TO_TICKS(5));

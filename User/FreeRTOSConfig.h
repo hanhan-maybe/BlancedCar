@@ -3,6 +3,8 @@
 /* 允许调用 uxTaskGetStackHighWaterMark() 查询任务栈高水位 */
 #define INCLUDE_uxTaskGetStackHighWaterMark    1
 
+
+
 #include "stm32f10x.h"
 #include <stdint.h>
 
@@ -13,8 +15,8 @@
 /* 使用抢占式调度 */
 #define configUSE_PREEMPTION                    1
 
-/* 使用空闲任务Hook：阶段一可先关闭 */
-#define configUSE_IDLE_HOOK                     0
+/* 使用空闲任务Hook：打开统计CPU占有率 */
+#define configUSE_IDLE_HOOK                     1
 
 /* 使用Tick Hook：阶段一关闭 */
 #define configUSE_TICK_HOOK                     0
